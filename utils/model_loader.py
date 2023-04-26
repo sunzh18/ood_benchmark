@@ -1,0 +1,69 @@
+import os
+
+from models.resnet import *
+from models.cifar_resnet import resnet18_cifar, resnet50_cifar
+from models.resnet_react import resnet18, resnet50
+from models.mobilenet import mobilenet_v2
+from models.wideresnet import WideResNet28
+import torch
+from timm.models import create_model
+
+
+train_on_gpu = torch.cuda.is_available() 
+
+
+def get_model(args, num_classes, load_ckpt=True):
+    if args.in_dataset == 'imagenet':
+        checkpoint = None
+        if args.model == 'resnet18':
+            model = resnet18(num_classes=num_classes, pretrained=False)
+            checkpoint = torch.load('/data/Public/PretrainedModels/resnet18-5c106cde.pth')
+            
+        elif args.model == 'resnet50':
+            model = resnet50(num_classes=num_classes, pretrained=False)
+            checkpoint = torch.load("/data/Public/PretrainedModels/resnet50-19c8e357.pth")
+
+        elif args.model == 'mobilenet':
+            model = mobilenet_v2(num_classes=num_classes, pretrained=False)
+            checkpoint = torch.load("/data/Public/PretrainedModels/mobilenet_v2-b0353104.pth")
+
+        elif args.model == 'vit':
+            model = create_model("vit_base_patch16_384",pretrained=False,num_classes=num_classes)
+
+        if checkpoint:
+            model.load_state_dict(checkpoint)
+    else:
+        if args.model == 'resnet18':
+            model = resnet18_cifar(num_classes=num_classes)
+        elif args.model == 'resnet50':
+            model = resnet50_cifar(num_classes=num_classes)
+        elif args.model == 'wrn':
+            model = WideResNet28(num_classes=num_classes)
+        elif args.model == 'mobilenet':
+            model = mobilenet_v2(num_classes=num_classes)
+        else:
+            assert False, 'Not supported model arch: {}'.format(args.model)
+
+    device = torch.device("cuda") 
+    if train_on_gpu:                                                   #部署到GPU上
+        device = torch.device("cuda") 
+    else:
+        device = torch.device("cpu")
+    model = model.to(device) 
+
+    # model = nn.DataParallel(model)
+
+    if (args.in_dataset != 'imagenet') and load_ckpt:
+        # checkpoint = torch.load("./checkpoints/{in_dataset}/{model}/checkpoint_{epochs}.pth.tar".format(in_dataset=args.in_dataset, model=args.model, epochs=args.epochs))
+        # checkpoint = torch.load(args.model_path)
+        if args.arch:
+            checkpoint = torch.load(f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_{args.arch}_parameter.pth')
+        else:
+            checkpoint = torch.load(f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth')
+        model.load_state_dict(checkpoint['state_dict'])
+        # model.load_state_dict(torch.load(args.model_path))
+
+    # get the number of model parameters
+    print('Number of model parameters: {}'.format(
+        sum([p.data.nelement() for p in model.parameters()])))
+    return model
