@@ -5,6 +5,7 @@ from models.cifar_resnet import resnet18_cifar, resnet50_cifar
 from models.resnet_react import resnet18, resnet50
 from models.mobilenet import mobilenet_v2
 from models.wideresnet import WideResNet28
+from models.densenet import DenseNet3
 import torch
 from timm.models import create_model
 
@@ -12,15 +13,15 @@ from timm.models import create_model
 train_on_gpu = torch.cuda.is_available() 
 
 
-def get_model(args, num_classes, load_ckpt=True):
+def get_model(args, num_classes, load_ckpt=True, info=None):
     if args.in_dataset == 'imagenet':
         checkpoint = None
         if args.model == 'resnet18':
-            model = resnet18(num_classes=num_classes, pretrained=False)
+            model = resnet18(num_classes=num_classes, pretrained=False, p=args.p, info=info)
             checkpoint = torch.load('/data/Public/PretrainedModels/resnet18-5c106cde.pth')
             
         elif args.model == 'resnet50':
-            model = resnet50(num_classes=num_classes, pretrained=False)
+            model = resnet50(num_classes=num_classes, pretrained=False, p=args.p, info=info)
             checkpoint = torch.load("/data/Public/PretrainedModels/resnet50-19c8e357.pth")
 
         elif args.model == 'mobilenet':
@@ -34,13 +35,15 @@ def get_model(args, num_classes, load_ckpt=True):
             model.load_state_dict(checkpoint)
     else:
         if args.model == 'resnet18':
-            model = resnet18_cifar(num_classes=num_classes)
+            model = resnet18_cifar(num_classes=num_classes, p=args.p, info=info)
         elif args.model == 'resnet50':
-            model = resnet50_cifar(num_classes=num_classes)
+            model = resnet50_cifar(num_classes=num_classes, p=args.p, info=info)
         elif args.model == 'wrn':
             model = WideResNet28(num_classes=num_classes)
         elif args.model == 'mobilenet':
             model = mobilenet_v2(num_classes=num_classes)
+        elif args.model == 'densenet':
+            model = DenseNet3(100, num_classes, 12, reduction=0.5, bottleneck=True, dropRate=0.0, normalizer=None, p=args.p, info=info)
         else:
             assert False, 'Not supported model arch: {}'.format(args.model)
 

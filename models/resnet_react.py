@@ -3,6 +3,7 @@ import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
+from models.route import *
 __all__ = ['ResNet', 'resnet18', 'resnet50', ]
 
 
@@ -289,9 +290,14 @@ class AbstractResNet(nn.Module):
 
 class ResNet(AbstractResNet):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_classes=1000, p=None, info=None):
         super(ResNet, self).__init__(block, layers, num_classes)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        if p is None:
+            self.fc = nn.Linear(512 * block.expansion, num_classes)
+        else:
+            self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
         self._initial_weight()
         for m in self.modules():
             if isinstance(m, nn.Linear):
@@ -403,8 +409,11 @@ class ResNetCifar(AbstractResNet):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.method = method
 
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
-
+        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        if p is None:
+            self.fc = nn.Linear(512 * block.expansion, num_classes)
+        else:
+            self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
         # if method.find("ood") > -1:
         #     self.fc_ood = RouteFcMaxAct(512 * block.expansion, 1, topk=p)
 

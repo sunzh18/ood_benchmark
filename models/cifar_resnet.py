@@ -4,6 +4,7 @@ import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
+from models.route import *
 
 normalization = nn.BatchNorm2d
 
@@ -235,7 +236,12 @@ class ResNetCifar(AbstractResNet):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.method = method
 
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        if p is None:
+            self.fc = nn.Linear(512 * block.expansion, num_classes)
+        else:
+            self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
+
         self.relu = nn.ReLU(inplace=False)
         self.avgpool = nn.AvgPool2d(4, stride=1)
         self._initial_weight()

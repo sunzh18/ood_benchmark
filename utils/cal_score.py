@@ -57,7 +57,6 @@ def iterate_data_odin(data_loader, model, epsilon, temper, logger):
         confs.extend(np.max(nnOutputs, axis=1))
         # if b % 100 == 0:
         #     logger.info('{} batches processed'.format(b))
-
         # debug
         # if b > 500:
         #    break
@@ -119,6 +118,20 @@ def kl(p, q):
     # q = np.asarray(q, dtype=np.float)
 
     return np.sum(np.where(p != 0, p * np.log(p / q), 0))
+
+
+def iterate_data_dice(data_loader, model, temper):
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()
+            # compute output, measure accuracy and record loss.
+            logits = model(x)
+
+            conf = temper * torch.logsumexp(logits / temper, dim=1)
+            confs.extend(conf.data.cpu().numpy())
+    return np.array(confs)
+
 
 
 

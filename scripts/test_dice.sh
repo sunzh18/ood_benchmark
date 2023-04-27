@@ -10,7 +10,7 @@ model_path="checkpoints/network"
 
 # arch='norm_relu_x10'
 
-CUDA_VISIBLE_DEVICES=${GPU} python test_baselines.py \
+CUDA_VISIBLE_DEVICES=${GPU} python test_dice.py \
 --model densenet \
 --name baseline \
 --batch 128 \
@@ -18,5 +18,6 @@ CUDA_VISIBLE_DEVICES=${GPU} python test_baselines.py \
 --logdir result \
 --score ${SCORE} \
 --model_path ${model_path} \
+ --p 90 \
 # --arch ${arch}
 # --out_dataset ${out_dataset} \

@@ -45,7 +45,8 @@ def get_argparser():
 
     # parser.add_argument('--epsilon', default=8, type=int, help='epsilon')
 
-    parser.add_argument('--threshold', default=1.0, type=float, help='sparsity level')
+    parser.add_argument('--threshold', default=1.0, type=float, help='react sparsity level')
+    parser.add_argument('--p', default=None, type=int, help='dice sparsity level')
     parser.add_argument('--gpu', default='0', type=str, help='gpu index')
     parser.add_argument('--bats', default=0, type=int, help='Using BATS to boost the performance or not.')
 

@@ -40,78 +40,12 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
+    
     elif args.score == 'dice':
-        
-        info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
-        model = get_model(args, num_classes, load_ckpt=True, info=info)
-
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
-    elif args.score == 'Mahalanobis':
-        sample_mean, precision, lr_weights, lr_bias, magnitude = np.load(
-            os.path.join(args.mahalanobis_param_path, 'results.npy'), allow_pickle=True)
-        sample_mean = [s.cuda() for s in sample_mean]
-        precision = [p.cuda() for p in precision]
-
-        regressor = LogisticRegressionCV(cv=2).fit([[0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1], [1, 1, 1, 1]],
-                                                   [0, 0, 1, 1])
-
-        regressor.coef_ = lr_weights
-        regressor.intercept_ = lr_bias
-
-        temp_x = torch.rand(2, 3, 480, 480)
-        temp_x = Variable(temp_x).cuda()
-        temp_list = model(x=temp_x, layer_index='all')[1]
-        num_output = len(temp_list)
-
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_mahalanobis(in_loader, model, num_classes, sample_mean, precision,
-                                             num_output, magnitude, regressor, logger)
-        logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_mahalanobis(out_loader, model, num_classes, sample_mean, precision,
-                                              num_output, magnitude, regressor, logger)
-    elif args.score == 'KL_Div':
-        logger.info("Processing in-distribution data...")
-        in_dist_logits, in_labels = iterate_data_kl_div(in_loader, model)
-        logger.info("Processing out-of-distribution data...")
-        out_dist_logits, _ = iterate_data_kl_div(out_loader, model)
-
-        class_mean_logits = []
-        for c in range(num_classes):
-            selected_idx = (in_labels == c)
-            selected_logits = in_dist_logits[selected_idx]
-            class_mean_logits.append(np.mean(selected_logits, axis=0))
-        class_mean_logits = np.array(class_mean_logits)
-
-        logger.info("Compute distance for in-distribution data...")
-        in_scores = []
-        for i, logit in enumerate(in_dist_logits):
-            if i % 100 == 0:
-                logger.info('{} samples processed...'.format(i))
-            min_div = float('inf')
-            for c_mean in class_mean_logits:
-                cur_div = kl(logit, c_mean)
-                if cur_div < min_div:
-                    min_div = cur_div
-            in_scores.append(-min_div)
-        in_scores = np.array(in_scores)
-
-        logger.info("Compute distance for out-of-distribution data...")
-        out_scores = []
-        for i, logit in enumerate(out_dist_logits):
-            if i % 100 == 0:
-                logger.info('{} samples processed...'.format(i))
-            min_div = float('inf')
-            for c_mean in class_mean_logits:
-                cur_div = kl(logit, c_mean)
-                if cur_div < min_div:
-                    min_div = cur_div
-            out_scores.append(-min_div)
-        out_scores = np.array(out_scores)
-    else:
-        raise ValueError("Unknown score type {}".format(args.score))
 
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
@@ -143,29 +77,6 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
 
     logger.flush()
     return auroc, aupr_in, aupr_out, fpr95
-
-
-# def main(args):
-#     logger = log.setup_logger(args)
-
-#     torch.backends.cudnn.benchmark = True
-
-    # in_set, out_set, in_loader, out_loader = mk_id_ood(args, logger)
-
-#     logger.info(f"Loading model from {args.model_path}")
-#     model = KNOWN_MODELS[args.model](head_size=len(in_set.classes))
-
-#     state_dict = torch.load(args.model_path)
-#     model.load_state_dict_custom(state_dict['model'])
-
-#     model = torch.nn.DataParallel(model)
-#     model = model.cuda()
-
-#     start_time = time.time()
-#     run_eval(model, in_loader, out_loader, logger, args, num_classes=len(in_set.classes))
-#     end_time = time.time()
-
-#     logger.info("Total running time: {}".format(end_time - start_time))
 
 
 def main(args):
@@ -200,8 +111,24 @@ def main(args):
     if args.model_path != None:
         load_ckpt = True
 
-    model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    
+    info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+    print(info.shape)
+    model = get_model(args, num_classes, load_ckpt=False, info=info)
+    args.p = None
+    model2 = get_model(args, num_classes, load_ckpt=False, info=info)
+    checkpoint = torch.load(
+            f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
+
+    model.load_state_dict(checkpoint['state_dict'])
+    model2.load_state_dict(checkpoint['state_dict'])
+
+    print('model:', model.fc.weight)
+    print('model2:', model2.fc.weight)
+    if model.fc.weight.data ==  model2.fc.weight.data:
+        print('6666')
+    else:
+        print('1111')
+    return 
     # model.eval()
 
     if args.out_dataset is not None:
