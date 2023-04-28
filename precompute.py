@@ -24,6 +24,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from scipy.stats import laplace
+import torch.nn.functional as F
 
 
 def get_features(args, model, dataloader):
@@ -32,7 +33,10 @@ def get_features(args, model, dataloader):
         with torch.no_grad():
             x = x.cuda()            
             # print(x.size())
-            feature = model.forward_features(x)
+            # feature = model.forward_features(x)
+            outputs = model.features(x)
+            feature = F.adaptive_avg_pool2d(outputs, 1)
+            feature = feature.view(feature.size(0), -1)
             # print(feature.size())
             features.extend(feature.data.cpu().numpy())
             # x = feature[feature>=0]
@@ -40,7 +44,7 @@ def get_features(args, model, dataloader):
 
     features = np.array(features)
     # x = np.transpose(features)
-    # print(features.shape, features)
+    print(features.shape)
 
     return features
 
@@ -57,7 +61,11 @@ def main(args):
     if args.model_path != None:
         load_ckpt = True
 
-    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model = get_model(args, num_classes, load_ckpt=False)
+    checkpoint = torch.load(
+            f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
+
+    model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
@@ -69,7 +77,12 @@ def main(args):
     np.save(f"{file_folder}/{args.model}_feat_mean.npy", features.mean(0))
     np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
 
+    info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+    mean = features.mean(0)
+    print(mean.shape)
 
+    print(mean)
+    print(info)
 
 
 

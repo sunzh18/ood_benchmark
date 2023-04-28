@@ -205,6 +205,66 @@ def analysis_actvalue(args, model, in_loader, out_loader, out_dataset, max=50):
     plt.close()
 
 
+def analysis_mean_actvalue(args, model, in_loader, out_loader, out_dataset):
+    model.eval()
+
+    in_features = get_features(args, model, in_loader)
+    out_features = get_features(args, model, out_loader)
+    
+    in_mean_actvalue = in_features.mean(1)
+    out_mean_actvalue = out_features.mean(1)
+
+    print(in_mean_actvalue.shape, out_mean_actvalue.shape)
+
+    path = f'analysis_feature/mean_actvalue/{args.name}/{args.in_dataset}/{args.model}'
+    if not os.path.isdir(path):
+        os.makedirs(path)
+    save_pic_filename=f'{path}/{args.in_dataset}_{out_dataset}.png'
+    fig, ax = plt.subplots(figsize=(8, 4))
+    sns.kdeplot(data=in_mean_actvalue, label=f'{args.in_dataset}', color='crimson', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    sns.kdeplot(data=out_mean_actvalue, label=f'{out_dataset}', color='limegreen', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    # plt.title(f"max={max}")
+    plt.xlabel("mean act value")
+    ax.legend(loc="upper right")
+    # plt.xlim(0, m * 10)
+    plt.savefig(save_pic_filename,dpi=600)
+    
+    plt.close()
+
+
+
+def analysis_topkmean_actvalue(args, model, in_loader, out_loader, out_dataset, p=0.1):
+    model.eval()
+
+    in_features = get_features(args, model, in_loader)
+    out_features = get_features(args, model, out_loader)
+    
+    top = int(p * in_features.shape[1]) 
+    print(top)
+
+    # 取出每行中第max大的元素
+    in_actvalue = np.sort(in_features, axis=1)[:, -top:]
+    out_actvalue = np.sort(out_features, axis=1)[:, -top:]
+    in_mean_actvalue = in_actvalue.mean(1)
+    out_mean_actvalue = out_actvalue.mean(1)
+
+    print(in_mean_actvalue.shape, out_mean_actvalue.shape)
+
+    path = f'analysis_feature/mean_actvalue/{args.name}/{args.in_dataset}/{args.model}/p{p}'
+    if not os.path.isdir(path):
+        os.makedirs(path)
+    save_pic_filename=f'{path}/{args.in_dataset}_{out_dataset}.png'
+    fig, ax = plt.subplots(figsize=(8, 4))
+    sns.kdeplot(data=in_mean_actvalue, label=f'{args.in_dataset}', color='crimson', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    sns.kdeplot(data=out_mean_actvalue, label=f'{out_dataset}', color='limegreen', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    # plt.title(f"max={max}")
+    plt.xlabel(f"top {p} mean act value")
+    ax.legend(loc="upper right")
+    # plt.xlim(0, m * 10)
+    plt.savefig(save_pic_filename,dpi=600)
+    
+    plt.close()
+
 
 
 def main(args):
@@ -244,8 +304,11 @@ def main(args):
 
             in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
             # analysis_actnum(args, model, in_loader, out_loader, out_dataset)
-            for i in [50, 100, 150, 200, 300, 400, 10]:     
-                analysis_actvalue(args, model, in_loader, out_loader, out_dataset, i)
+            # analysis_mean_actvalue(args, model, in_loader, out_loader, out_dataset)
+            for i in [0.1, 0.3, 0.5, 0.7]:  
+                analysis_topkmean_actvalue(args, model, in_loader, out_loader, out_dataset, i)
+            # for i in [50, 100, 150, 200, 300, 400, 10]:     
+            #     analysis_actvalue(args, model, in_loader, out_loader, out_dataset, i)
             # in_scores, out_scores = run_eval(model, in_loader, out_loader, args, num_classes=num_classes, out_dataset=out_dataset)
             # analysis_score(args, in_scores, out_scores, out_dataset)
 
