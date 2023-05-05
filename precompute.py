@@ -19,6 +19,8 @@ from utils.model_loader import get_model
 from utils.cal_score import *
 from argparser import *
 
+import torchvision
+from torchvision import transforms
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -49,12 +51,86 @@ def get_features(args, model, dataloader):
     return features
 
 
-def main(args):
-    in_dataset = args.in_dataset
+def extact_mean_std(args, model):
+    for key, v in model.state_dict().items():
+        # resnet
+        if key == 'layer4.1.bn2.weight':
+            # print(f'var: {v}')
+            std = v
+        if key == 'layer4.1.bn2.bias':
+            # print(f'mean: {v}')
+            mean = v
+        
 
-    loader_in_dict = get_dataloader_in(args, split=('train','val'))
-    train_dataloader, test_dataloader, num_classes = loader_in_dict.train_loader, loader_in_dict.val_loader, loader_in_dict.num_classes
-    train_set, test_set = loader_in_dict.train_dataset, loader_in_dict.val_dataset
+        # print(f'{key}')
+        #wideresnet, densenet
+        if key == 'bn1.weight':
+            # print(f'var: {v}')
+            std = v
+        if key == 'bn1.bias':
+            # print(f'mean: {v}')
+            mean = v
+
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    if not os.path.isdir(file_folder):
+        os.makedirs(file_folder)
+    
+    torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
+    torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
+    print(mean)
+    print(std)
+
+kwargs = {'num_workers': 2, 'pin_memory': True}
+imagesize = 32
+transform_test = transforms.Compose([
+    transforms.Resize((imagesize, imagesize)),
+    transforms.CenterCrop(imagesize),
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+transform_test_largescale = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+])
+
+def main(args):
+    if args.in_dataset == "CIFAR-10":
+        data_path = '/data/Public/Datasets/cifar10'
+        # Data loading code
+        trainset = torchvision.datasets.CIFAR10(root=data_path, train=True, download=False, transform=transform_test)
+        train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+
+        num_classes = 10
+
+    elif args.in_dataset == "CIFAR-100":
+        data_path = '/data/Public/Datasets/cifar100'
+        # Data loading code
+        trainset = torchvision.datasets.CIFAR100(root=data_path, train=True, download=False, transform=transform_test)
+        train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+
+        num_classes = 100
+
+    elif args.in_dataset == "imagenet100":
+        root = '/data/Public/Datasets/ImageNet100'
+        # Data loading code
+        trainset = torchvision.datasets.ImageFolder(os.path.join(root, 'train'), transform_test_largescale)
+        train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+
+        num_classes = 100
+
+       
+    elif args.in_dataset == "imagenet":
+        root = '/data/Public/Datasets/ilsvrc2012'
+        # Data loading code
+        trainset = torchvision.datasets.ImageFolder(os.path.join(root, 'train'), transform_test_largescale)
+        train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+
+        num_classes = 1000
+
     args.num_classes = num_classes
 
     load_ckpt = False
@@ -67,6 +143,7 @@ def main(args):
 
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
+    extact_mean_std(args, model)
 
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     if not os.path.isdir(file_folder):
@@ -74,15 +151,15 @@ def main(args):
     
     features = get_features(args, model, train_dataloader)
 
-    np.save(f"{file_folder}/{args.model}_feat_mean.npy", features.mean(0))
-    np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
+    np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
+    # np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
 
-    info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
-    mean = features.mean(0)
-    print(mean.shape)
+    # info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+    # mean = features.mean(0)
+    # print(mean.shape)
 
-    print(mean)
-    print(info)
+    # print(mean)
+    # print(info)
 
 
 

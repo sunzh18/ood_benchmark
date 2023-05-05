@@ -5,7 +5,7 @@ model=$2
 # SCORE=$2
 # BATS=$3
 
-GPU=1
+GPU=7
 out_dataset="SUN"
 # model_path="checkpoints/network/resnet18_cifar10.pth"
 model_path="checkpoints/network"
