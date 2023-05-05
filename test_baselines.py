@@ -49,6 +49,11 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
+    elif args.score == 'GradNorm':
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_gradnorm(in_loader, model, args.temperature_gradnorm, num_classes)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_gradnorm(out_loader, model, args.temperature_gradnorm, num_classes)
     elif args.score == 'Mahalanobis':
         sample_mean, precision, lr_weights, lr_bias, magnitude = np.load(
             os.path.join(args.mahalanobis_param_path, 'results.npy'), allow_pickle=True)

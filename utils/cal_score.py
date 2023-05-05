@@ -77,6 +77,35 @@ def iterate_data_energy(data_loader, model, temper):
     return np.array(confs)
 
 
+def iterate_data_gradnorm(data_loader, model, temperature, num_classes):
+    confs = []
+    logsoftmax = torch.nn.LogSoftmax(dim=-1).cuda()
+    for b, (x, y) in enumerate(data_loader):
+        if b % 100 == 0:
+            print('{} batches processed'.format(b))
+        inputs = Variable(x.cuda(), requires_grad=True)
+
+        model.zero_grad()
+        outputs = model(inputs)  
+        targets = torch.ones((inputs.shape[0], num_classes)).cuda()
+        outputs = outputs / temperature
+        loss = torch.mean(torch.sum(-targets * logsoftmax(outputs), dim=-1))
+
+        loss.backward(retain_graph=True)
+        
+        # if num_classes==1000:
+        #     layer_grad = model.head.weight.grad.data
+        # else:
+        #     layer_grad = model.fc.weight.grad.data
+        layer_grad = model.fc.weight.grad.data
+
+        layer_grad_norm = torch.sum(torch.abs(layer_grad)).cpu().numpy()
+        confs.append(layer_grad_norm)
+
+    return np.array(confs)
+
+
+
 def iterate_data_mahalanobis(data_loader, model, num_classes, sample_mean, precision,
                              num_output, magnitude, regressor, logger):
     confs = []
@@ -247,10 +276,11 @@ def bats_iterate_data_gradnorm(data_loader, model, temperature, num_classes, lam
 
         loss.backward(retain_graph=True)
         
-        if num_classes==1000:
-            layer_grad = model.head.weight.grad.data
-        else:
-            layer_grad = model.fc.weight.grad.data
+        # if num_classes==1000:
+        #     layer_grad = model.head.weight.grad.data
+        # else:
+        #     layer_grad = model.fc.weight.grad.data
+        layer_grad = model.fc.weight.grad.data
 
         layer_grad_norm = torch.sum(torch.abs(layer_grad)).cpu().numpy()
         confs.append(layer_grad_norm)
