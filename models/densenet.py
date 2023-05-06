@@ -106,9 +106,10 @@ class DenseNet3(nn.Module):
         self.bn1 = nn.BatchNorm2d(in_planes)
         self.relu = nn.ReLU(inplace=True)
 
-        if p is None:
+        if p is None or info is None:
             self.fc = nn.Linear(in_planes, num_classes)
         else:
+            print('use dice')
             self.fc = RouteDICE(in_planes, num_classes, p=p, info=info)
 
         self.in_planes = in_planes
@@ -178,11 +179,11 @@ class DenseNet3(nn.Module):
 
         out_list = []
         out = self.conv1(x)
-        out_list.append(out)
+        # out_list.append(out)
         out = self.trans1(self.block1(out))
-        out_list.append(out)
+        # out_list.append(out)
         out = self.trans2(self.block2(out))
-        out_list.append(out)
+        # out_list.append(out)
         out = self.block3(out)
         out = self.relu(self.bn1(out))
         out_list.append(out)

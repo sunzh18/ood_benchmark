@@ -111,24 +111,24 @@ def main(args):
     if args.model_path != None:
         load_ckpt = True
 
-    info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+    # info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+    info = np.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_feat_stat.npy")
     print(info.shape)
     model = get_model(args, num_classes, load_ckpt=False, info=info)
-    args.p = None
-    model2 = get_model(args, num_classes, load_ckpt=False, info=info)
+    # args.p = None
+    # model2 = get_model(args, num_classes, load_ckpt=False, info=info)
     checkpoint = torch.load(
             f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
 
     model.load_state_dict(checkpoint['state_dict'])
-    model2.load_state_dict(checkpoint['state_dict'])
+    # model2.load_state_dict(checkpoint['state_dict'])
 
-    print('model:', model.fc.weight)
-    print('model2:', model2.fc.weight)
-    if model.fc.weight.data ==  model2.fc.weight.data:
-        print('6666')
-    else:
-        print('1111')
-    return 
+    # print('model:', model.fc.weight)
+    # print('model2:', model2.fc.weight)
+    # if model.fc.weight.data ==  model2.fc.weight.data:
+    #     print('6666')
+    # else:
+    #     print('1111')
     # model.eval()
 
     if args.out_dataset is not None:

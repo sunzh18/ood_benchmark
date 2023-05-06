@@ -104,8 +104,6 @@ def iterate_data_gradnorm(data_loader, model, temperature, num_classes):
 
     return np.array(confs)
 
-
-
 def iterate_data_mahalanobis(data_loader, model, num_classes, sample_mean, precision,
                              num_output, magnitude, regressor, logger):
     confs = []
@@ -251,7 +249,6 @@ def bats_iterate_data_energy(data_loader, model, temper, lam=None, feature_std=N
             
             confs.extend(conf.data.cpu().numpy())
     return np.array(confs)
-
 
 
 def bats_iterate_data_gradnorm(data_loader, model, temperature, num_classes, lam=None, feature_std=None, feature_mean=None, bats=False):

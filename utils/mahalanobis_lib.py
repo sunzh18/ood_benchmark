@@ -30,7 +30,7 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
 
     for data, target in train_loader:
         total += data.size(0)
-        print(total)
+        # print(total)
         if total > 50000:
             break
         # data = data.cuda()
@@ -41,7 +41,9 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
         # get hidden features
         for i in range(num_output):
             out_features[i] = out_features[i].view(out_features[i].size(0), out_features[i].size(1), -1)
+            # print(out_features[i].shape)
             out_features[i] = torch.mean(out_features[i].data, 2)
+            # print(out_features[i].shape)
 
         # compute the accuracy
         pred = output.data.max(1)[1]
@@ -87,6 +89,9 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
         temp_precision = group_lasso.precision_
         temp_precision = torch.from_numpy(temp_precision).double().cuda()
         precision.append(temp_precision)
+
+    # for i in range(len(sample_class_mean)):
+    #     sample_class_mean[i] = sample_class_mean[i].cpu().numpy()
 
     print('\n Training Accuracy:({:.2f}%)\n'.format(100. * correct / total))
 

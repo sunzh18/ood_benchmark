@@ -237,9 +237,10 @@ class ResNetCifar(AbstractResNet):
         self.method = method
 
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
-        if p is None:
+        if p is None or info is None:
             self.fc = nn.Linear(512 * block.expansion, num_classes)
         else:
+            print('use dice')
             self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
 
         self.relu = nn.ReLU(inplace=False)

@@ -12,7 +12,7 @@ import os
 
 from sklearn.linear_model import LogisticRegressionCV
 from torch.autograd import Variable
-from utils.mahalanobis_lib import get_Mahalanobis_score
+from utils.mahalanobis_lib import sample_estimator
 from utils.data_loader import get_dataloader_in, get_dataloader_out, cifar_out_datasets, imagenet_out_datasets
 from utils.model_loader import get_model
 
@@ -35,10 +35,10 @@ def get_features(args, model, dataloader):
         with torch.no_grad():
             x = x.cuda()            
             # print(x.size())
-            # feature = model.forward_features(x)
-            outputs = model.features(x)
-            feature = F.adaptive_avg_pool2d(outputs, 1)
-            feature = feature.view(feature.size(0), -1)
+            feature = model.forward_features(x)
+            # outputs = model.features(x)
+            # feature = F.adaptive_avg_pool2d(outputs, 1)
+            # feature = feature.view(feature.size(0), -1)
             # print(feature.size())
             features.extend(feature.data.cpu().numpy())
             # x = feature[feature>=0]
@@ -79,6 +79,43 @@ def extact_mean_std(args, model):
     torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
     print(mean)
     print(std)
+
+
+def get_class_mean_precision(args, model, num_classes, train_loader):
+    if args.in_dataset == "CIFAR-10" or args.in_dataset == "CIFAR-100":
+        temp_x = torch.rand(2,3,32,32).cuda()
+    else:
+        temp_x = torch.rand(2,3,224,224).cuda()
+    temp_x = Variable(temp_x)
+    temp_list = model.feature_list(temp_x)[1]
+    num_output = len(temp_list)
+
+    print(num_output)
+
+    feature_list = np.empty(num_output)
+    count = 0
+    for out in temp_list:
+        print(out.shape)
+        print(out.size(1))
+        feature_list[count] = out.size(1)
+        count += 1
+    class_mean, precision = sample_estimator(model, num_classes, feature_list, train_loader)
+    for mean in class_mean:
+        print(mean.shape)
+        print(mean)
+    class_mean = np.array([item.cpu().detach().numpy() for item in class_mean])
+    precision = np.array([item.cpu().detach().numpy() for item in precision])
+    print(class_mean.shape, precision.shape)
+
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    if not os.path.isdir(file_folder):
+        os.makedirs(file_folder)
+    
+    # features = get_features(args, model, train_dataloader)
+
+    np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+
+
 
 kwargs = {'num_workers': 2, 'pin_memory': True}
 imagesize = 32
@@ -137,21 +174,23 @@ def main(args):
     if args.model_path != None:
         load_ckpt = True
 
-    model = get_model(args, num_classes, load_ckpt=False)
-    checkpoint = torch.load(
-            f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
+    
+    # checkpoint = torch.load(
+    #         f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
 
-    model.load_state_dict(checkpoint['state_dict'])
+    # model.load_state_dict(checkpoint['state_dict'])
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
-    extact_mean_std(args, model)
+
+    # extact_mean_std(args, model)
 
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     if not os.path.isdir(file_folder):
         os.makedirs(file_folder)
     
-    features = get_features(args, model, train_dataloader)
+    # features = get_features(args, model, train_dataloader)
 
-    np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
+    # np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
     # np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
 
     # info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
@@ -161,6 +200,8 @@ def main(args):
     # print(mean)
     # print(info)
 
+
+    get_class_mean_precision(args, model, num_classes, train_dataloader)
 
 
     

@@ -42,9 +42,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
     elif args.score == 'dice':
         
-        info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
+        info = np.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_feat_stat.npy")
         model = get_model(args, num_classes, load_ckpt=True, info=info)
-
+        model.eval()
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
