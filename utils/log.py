@@ -23,7 +23,7 @@ def setup_logger(args):
                 "stream": "ext://sys.stderr",
             },
             "logfile": {
-                "level": "DEBUG",
+                "level": "INFO",   #DEBUG
                 "formatter": "standard",
                 "class": "logging.FileHandler",
                 "filename": os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.txt"),
@@ -33,7 +33,7 @@ def setup_logger(args):
         "loggers": {
             "": {
                 "handlers": ["stderr", "logfile"],
-                "level": "DEBUG",
+                "level": "INFO",   #DEBUG
                 "propagate": True
             },
         }

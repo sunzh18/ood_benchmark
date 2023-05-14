@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from models.route import *
 
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride, dropRate=0.0):
@@ -49,7 +49,7 @@ class NetworkBlock(nn.Module):
         return self.layer(x)
 
 class WideResNet(nn.Module):
-    def __init__(self, depth, num_classes, widen_factor=1, dropRate=0.0):
+    def __init__(self, depth, num_classes, widen_factor=1, dropRate=0.0, p=None, info=None):
         super(WideResNet, self).__init__()
         nChannels = [16, 16*widen_factor, 32*widen_factor, 64*widen_factor, 64*widen_factor]
         assert((depth - 4) % 6 == 0)
@@ -72,7 +72,12 @@ class WideResNet(nn.Module):
         self.ID_mat = torch.eye(num_classes).cuda()
 
         # self.fc = nn.Linear(nChannels[3], num_classes, bias=False)
-        self.fc = nn.Linear(nChannels[3], num_classes)
+        if p is None or info is None:
+            self.fc = nn.Linear(nChannels[3], num_classes)
+        else:
+            print('use dice')
+            self.fc = RouteDICE(nChannels[3], num_classes, p=p, info=info)
+        # self.fc = nn.Linear(nChannels[3], num_classes)
         # self.fc.weight.requires_grad = False        # Freezing the weights during training
         self.nChannels = nChannels[3]
 
@@ -137,7 +142,18 @@ class WideResNet(nn.Module):
         # out = torch.abs(self.fc(out))
         out = self.fc(out)
         return out
-    
+
+    def forward_threshold(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.relu(self.bn1(feat))
+
+        out = F.avg_pool2d(feat, 8)
+        out = out.clip(max=threshold)
+        out = out.view(-1, self.nChannels)
+        
+        out = self.fc(out)
+        return out
+
     def feature_list(self, x):
         out_list = []
         out = self.conv1(x)
@@ -149,8 +165,8 @@ class WideResNet(nn.Module):
         out = self.block3(out)
         # out_list.append(out)
         
-        out_list.append(out)
         out = self.relu(self.bn1(out))
+        out_list.append(out)
         out = F.avg_pool2d(out, 8)
         out = out.view(-1, self.nChannels)
         # out = F.normalize(out, dim=1, p=2)

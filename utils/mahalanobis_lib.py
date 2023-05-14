@@ -43,6 +43,7 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
             out_features[i] = out_features[i].view(out_features[i].size(0), out_features[i].size(1), -1)
             # print(out_features[i].shape)
             out_features[i] = torch.mean(out_features[i].data, 2)
+            # out_features[i] = out_features[i].view(out_features[i].size(0), -1)
             # print(out_features[i].shape)
 
         # compute the accuracy

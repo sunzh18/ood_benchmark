@@ -294,9 +294,10 @@ class ResNet(AbstractResNet):
         super(ResNet, self).__init__(block, layers, num_classes)
 
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
-        if p is None:
+        if p is None or info is None:
             self.fc = nn.Linear(512 * block.expansion, num_classes)
         else:
+            print('use dice')
             self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
         self._initial_weight()
         for m in self.modules():

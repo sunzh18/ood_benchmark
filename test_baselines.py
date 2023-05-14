@@ -49,6 +49,12 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
+    elif args.score == 'react':
+        # args.threshold = 1.25
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
     elif args.score == 'GradNorm':
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_gradnorm(in_loader, model, args.temperature_gradnorm, num_classes)
@@ -129,7 +135,8 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
     if args.arch:
         result.append(f'{args.name}/{args.in_dataset}/{args.model}_{args.arch}')
     else:
-        result.append(f'{args.name}/{args.in_dataset}/{args.model}')
+        # result.append(f'{args.name}/{args.in_dataset}/{args.model}')
+        result.append(f'threshold{args.threshold}/p{args.p}/bat{args.bats}')
     result.append(out_dataset)
     result.append("{:.4f}".format(auroc))
     result.append("{:.4f}".format(aupr_in))
@@ -207,7 +214,10 @@ def main(args):
 
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     
-    # model.eval()
+    model.eval()
+
+    if args.score == 'react':
+        find_threshold(args, model, in_loader)
 
     if args.out_dataset is not None:
         out_dataset = args.out_dataset
@@ -279,12 +289,37 @@ def main(args):
         logger.info('Average FPR95: {}'.format(avg_fpr95))
 
 
+def get_features(args, model, dataloader):
+    features = []
+    for b, (x, y) in enumerate(dataloader):
+        with torch.no_grad():
+            x = x.cuda()            
+            # print(x.size())
+            feature = model.forward_features(x)
+            # print(feature.size())
+            features.extend(feature.data.cpu().numpy())
+            # x = feature[feature>=0]
+            # print(x.size())
 
+    features = np.array(features)
+    # x = np.transpose(features)
+    # print(features.shape, features)
+
+    return features
+
+def find_threshold(args, model, dataloader):
+    features = get_features(args, model, dataloader)
+    # print(features.flatten().shape)
+    print(f"\nTHRESHOLD at percentile {90} is:")
+    threshold = np.percentile(features.flatten(), 90)
+    print(threshold)
+    args.threshold = threshold
+    return 
 
 if __name__ == "__main__":
     parser = get_argparser()
 
+    args = parser.parse_args()
+
     
-
-
-    main(parser.parse_args())
+    main(args)

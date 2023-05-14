@@ -187,7 +187,10 @@ class MobileNetV2(nn.Module):
         return x
 
     def forward(self, x, threshold=1e6):
-        return self._forward_impl(x, threshold=1e10)
+        return self._forward_impl(x, threshold=threshold)
+
+    def forward_threshold(self, x, threshold=1e10):
+        return self._forward_impl(x, threshold=threshold)
 
     def feature_list(self, x):
         out_list = []

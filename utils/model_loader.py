@@ -39,7 +39,7 @@ def get_model(args, num_classes, load_ckpt=True, info=None):
         elif args.model == 'resnet50':
             model = resnet50_cifar(num_classes=num_classes, p=args.p, info=info)
         elif args.model == 'wrn':
-            model = WideResNet28(num_classes=num_classes)
+            model = WideResNet28(num_classes=num_classes, p=args.p, info=info)
         elif args.model == 'mobilenet':
             model = mobilenet_v2(num_classes=num_classes)
         elif args.model == 'densenet':

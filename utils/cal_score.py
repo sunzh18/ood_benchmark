@@ -76,6 +76,18 @@ def iterate_data_energy(data_loader, model, temper):
             confs.extend(conf.data.cpu().numpy())
     return np.array(confs)
 
+def iterate_data_react(data_loader, model, temper, threshold):
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()
+            # compute output, measure accuracy and record loss.
+            logits = model.forward_threshold(x, threshold)
+
+            conf = temper * torch.logsumexp(logits / temper, dim=1)
+            confs.extend(conf.data.cpu().numpy())
+    return np.array(confs)
+
 
 def iterate_data_gradnorm(data_loader, model, temperature, num_classes):
     confs = []

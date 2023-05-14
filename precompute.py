@@ -41,6 +41,7 @@ def get_features(args, model, dataloader):
             # feature = feature.view(feature.size(0), -1)
             # print(feature.size())
             features.extend(feature.data.cpu().numpy())
+            # features.extend(feature)
             # x = feature[feature>=0]
             # print(x.size())
 
@@ -189,12 +190,20 @@ def main(args):
         os.makedirs(file_folder)
     
     # features = get_features(args, model, train_dataloader)
+    # features = torch.tensor([item.cpu().detach().numpy() for item in features]).cuda()
+    # print(features.shape)
 
+    # mean_features = torch.mean(features.data, 0)
+    # print(mean_features.shape)
+    # features = np.array([item.cpu().detach().numpy() for item in features])
+    # print(features.shape)
+    # mean = mean_features.cpu().detach().numpy()
+    # np.save(f"{file_folder}/{args.model}_feat_stat.npy", mean)
     # np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
     # np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
 
     # info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
-    # mean = features.mean(0)
+    # # mean = features.mean(0)
     # print(mean.shape)
 
     # print(mean)
@@ -203,8 +212,6 @@ def main(args):
 
     get_class_mean_precision(args, model, num_classes, train_dataloader)
 
-
-    
 
     
 

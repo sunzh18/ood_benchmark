@@ -1,9 +1,10 @@
 
 in_dataset=$1
-SCORE=$2
-OUT_DATA=$3
+model=$2
+SCORE=$3
+OUT_DATA=$4
 ood_data="/data15/data15_5/Public/Datasets"
-GPU=7
+GPU=6
 out_dataset="SUN"
 # model_path="checkpoints/network/resnet18_cifar10.pth"
 model_path="checkpoints/network"
@@ -11,7 +12,7 @@ model_path="checkpoints/network"
 # arch='norm_relu_x10'
 
 CUDA_VISIBLE_DEVICES=${GPU} python test_baselines.py \
---model densenet \
+--model ${model} \
 --name baseline \
 --batch 64 \
 --in_dataset ${in_dataset} \
