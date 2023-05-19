@@ -119,8 +119,12 @@ def main(args):
     # model2 = get_model(args, num_classes, load_ckpt=False, info=info)
     checkpoint = torch.load(
             f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth.tar')
-
+            
     model.load_state_dict(checkpoint['state_dict'])
+    state_dict = {'state_dict':model.state_dict()}
+
+    torch.save(state_dict , f'{args.model_path}/{args.name}/{args.in_dataset}/{args.model}_parameter.pth')
+    
     # model2.load_state_dict(checkpoint['state_dict'])
 
     # print('model:', model.fc.weight)

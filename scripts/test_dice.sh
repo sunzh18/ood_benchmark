@@ -18,6 +18,6 @@ CUDA_VISIBLE_DEVICES=${GPU} python test_dice.py \
 --logdir result \
 --score ${SCORE} \
 --model_path ${model_path} \
- --p 90 \
+--p 90 \
 # --arch ${arch}
 # --out_dataset ${out_dataset} \

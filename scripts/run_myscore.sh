@@ -6,7 +6,7 @@ SCORE=$3
 p=$4
 # BATS=$4
 
-GPU=6
+GPU=$5
 out_dataset="SUN"
 # model_path="checkpoints/network/resnet18_cifar10.pth"
 model_path="checkpoints/network"

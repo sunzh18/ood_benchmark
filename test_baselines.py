@@ -50,7 +50,7 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
     elif args.score == 'react':
-        # args.threshold = 1.25
+        args.threshold = 2.75
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
@@ -129,22 +129,22 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
     
-    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
-    fp = open(result_path,'a+')
-    result = []
-    if args.arch:
-        result.append(f'{args.name}/{args.in_dataset}/{args.model}_{args.arch}')
-    else:
-        # result.append(f'{args.name}/{args.in_dataset}/{args.model}')
-        result.append(f'threshold{args.threshold}/p{args.p}/bat{args.bats}')
-    result.append(out_dataset)
-    result.append("{:.4f}".format(auroc))
-    result.append("{:.4f}".format(aupr_in))
-    result.append("{:.4f}".format(aupr_out))
-    result.append("{:.4f}".format(fpr95))
-    context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-    context.writerow(result)
-    fp.close()
+    # result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    # fp = open(result_path,'a+')
+    # result = []
+    # if args.arch:
+    #     result.append(f'{args.name}/{args.in_dataset}/{args.model}_{args.arch}')
+    # else:
+    #     # result.append(f'{args.name}/{args.in_dataset}/{args.model}')
+    #     result.append(f'threshold{args.threshold}/p{args.p}/bat{args.bats}')
+    # result.append(out_dataset)
+    # result.append("{:.4f}".format(auroc))
+    # result.append("{:.4f}".format(aupr_in))
+    # result.append("{:.4f}".format(aupr_out))
+    # result.append("{:.4f}".format(fpr95))
+    # context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+    # context.writerow(result)
+    # fp.close()
 
     logger.info('============Results for {}============'.format(args.score))
     logger.info('=======in dataset: {}; ood dataset: {}============'.format(args.in_dataset, out_dataset))
@@ -271,7 +271,8 @@ def main(args):
         if args.arch:
             result.append(f'{args.name}/{args.in_dataset}/{args.model}_{args.arch}')
         else:
-            result.append(f'{args.name}/{args.in_dataset}/{args.model}')
+            # result.append(f'{args.name}/{args.in_dataset}/{args.model}')
+            result.append(f'threshold{args.threshold}/p{args.p}/bat{args.bats}')
         result.append('Average')
         result.append("{:.4f}".format(avg_auroc))
         result.append("{:.4f}".format(avg_aupr_in))

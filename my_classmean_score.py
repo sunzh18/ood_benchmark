@@ -107,7 +107,7 @@ def test_model(model, data_loader, mask):
     return accu
 
 
-def test_model_mask(model, data_loader, mask):
+def test_model_mask(model, data_loader, mask, p):
     num=0
     accu=0
     
@@ -122,11 +122,24 @@ def test_model_mask(model, data_loader, mask):
             pred_y = torch.max(output, 1)[1].cpu().numpy()
 
             feature = model.forward_features(data)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
             counter_cp = 0
             cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
             for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda()     
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
                 counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            m1 = np.array(feature_prun.cpu().numpy() > 0)
+            m2 = np.array(feature_prun.cpu().numpy() == cp.cpu().numpy())
+            right = (m1 * m2).sum(axis=1)
+            count = np.sum(cp.cpu().numpy()>0,axis=1)
+            scale = torch.tensor(right / count + 1.0).float().cuda()
+            cp = cp * torch.exp(scale[:, None])
 
             logits = model.forward_head(cp)
             pred_y = torch.max(logits, 1)[1].cpu().numpy()
@@ -228,7 +241,7 @@ def iterate_data_my3(data_loader, model, temper, mask, p):
             m2 = np.array(feature_prun.cpu().numpy() == cp.cpu().numpy())
             right = (m1 * m2).sum(axis=1)
             count = np.sum(cp.cpu().numpy()>0,axis=1)
-            scale = torch.tensor(right / count + 1.0).float().cuda()
+            scale = torch.tensor(right / count).float().cuda()
             cp = cp * torch.exp(scale[:, None])
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
@@ -262,15 +275,227 @@ def iterate_data_my4(data_loader, model, temper, mask, p):
                 counter_cp = counter_cp + 1
 
             # print(feature_prun, cp, feature)
-            m1 = np.array(feature_prun.cpu().numpy() > 0)
-            m2 = np.array(feature_prun.cpu().numpy() == cp.cpu().numpy())
-            right = (m1 * m2).sum(axis=1)
-            count = np.sum(cp.cpu().numpy()>0,axis=1)
-            scale = torch.tensor(right / count + 1.0).float().cuda()
-            cp = cp * torch.exp(scale[:, None])
+            s1 = cp.sum(dim=1)
+            # s2 = feature_prun.sum(dim=1)
+
+            confs.extend(s1.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my5(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            # rate = s1/s2
+            rate = s2/(s2-s1)
+            # rate = torch.exp(rate)
+            confs.extend(rate.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my6(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            scale = s2/(s2-s1)
+            # cp = cp * torch.exp(scale[:, None])
+            # scale = scale + 1
+            cp = cp * scale[:, None]
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(cp)
+            conf = temper * (torch.logsumexp(logits / (temper), dim=1))
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my7(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            # scale = s1/s2
+            scale = s2/(s2-s1)
+            feature_prun = feature_prun * scale[:, None]
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(feature_prun)
+            conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my8(data_loader, model, temper, mask, p):
+
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = feature.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            scale = s1/s2
+            confs.extend(scale.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my9(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            # scale = s1/s2
+            scale = s2/(s2-s1)
+            # cp = cp * scale[:, None]
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            scale2 = s1/s2
+            conf = conf * scale
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my10(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                feature_prun[counter_cp,:] = feature_prun[counter_cp,:] * mask[idx,:].cuda()
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            # scale = s1/s2
+            scale = s1/s2
+            feature_prun = feature_prun * scale[:, None]
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(feature_prun)
+            conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            # scale2 = s1/s2
+            # conf = conf * scale
             confs.extend(conf.data.cpu().numpy())
 
     return np.array(confs)
@@ -330,7 +555,7 @@ def iterate_data_ashs(data_loader, model, temper, p):
             #
             # print(cp.type(), scale.type())
             s2 = feature_prun.sum(dim=1)
-            scale = s1 / s2
+            scale = s1 / s2 - 1.0
             feature_prun = feature_prun * torch.exp(scale[:, None])
             logits = model.forward_head(feature_prun)
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
@@ -398,6 +623,7 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         in_scores = iterate_data_my(in_loader, model, args.temperature_energy, mask)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my(out_loader, model, args.temperature_energy, mask)
+        analysis_score(args, in_scores, out_scores, out_dataset)
     elif args.score == 'my_score2':
         p = 0
         if args.p:
@@ -415,6 +641,75 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my3(out_loader, model, args.temperature_energy, mask, p)
 
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'my_score4':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my4(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my4(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score5':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my5(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my5(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score6':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my6(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my6(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score7':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my7(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my7(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score8':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my8(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my8(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score9':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my9(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my9(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score10':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my10(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my10(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
     
     in_examples = in_scores.reshape((-1, 1))
@@ -503,6 +798,7 @@ def analysis_act_value(model, data_loader, args, mask):
         p = args.p
     class_prun = []
     max_prun = []
+    feature_value = []
     with torch.no_grad():
         for data,target in tqdm(data_loader):
             data, target = data.cuda(), target.cuda()
@@ -527,8 +823,10 @@ def analysis_act_value(model, data_loader, args, mask):
             # print(feature_prun, cp, feature)
             s1 = cp.sum(dim=1)
             s2 = feature_prun.sum(dim=1)
+            s3 = feature.sum(dim=1)
             class_prun.extend(s1.cpu().numpy())
             max_prun.extend(s2.cpu().numpy())
+            feature_value.extend(s3.cpu().numpy())
     #         print(f'right:{right}, count:{count}')
     # #         logits = model.forward_head(cp)
     #         pred_y = torch.max(logits, 1)[1].cpu().numpy()
@@ -540,8 +838,9 @@ def analysis_act_value(model, data_loader, args, mask):
     #         num += len(y_label)
     class_prun = np.array(class_prun)
     max_prun = np.array(max_prun)
-    print(class_prun.shape, max_prun.shape)
-    return class_prun, max_prun
+    feature_value = np.array(feature_value)
+    print(class_prun.shape, max_prun.shape, feature_value.shape)
+    return class_prun, max_prun, feature_value
 
 def analysis_score(args, in_examples, out_examples, out_dataset):
     # fmean = np.mean(features, axis=0)
@@ -553,8 +852,9 @@ def analysis_score(args, in_examples, out_examples, out_dataset):
         os.makedirs(path)
     save_pic_filename=f'{path}/{args.in_dataset}_{out_dataset}.png'
     fig, ax = plt.subplots(figsize=(8, 4))
-    sns.kdeplot(data=in_examples, label=f'{args.in_dataset}', color='crimson', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
-    sns.kdeplot(data=out_examples, label=f'{out_dataset}', color='limegreen', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+
+    sns.kdeplot(data=in_examples, label='{}, mean{:.1f}, std{:.1f}'.format(args.in_dataset, in_examples.mean(0), in_examples.std(0)), color='crimson', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    sns.kdeplot(data=out_examples, label='{}, mean{:.1f}, std{:.1f}'.format(out_dataset, out_examples.mean(0), out_examples.std(0)), color='limegreen', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
     plt.xlabel("score")
     ax.legend(loc="upper right")
     # plt.xlim(0, m * 10)
@@ -584,14 +884,14 @@ def analysis(args):
     mask = get_class_mean(args)
     model.eval()
     # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
-    in_class_prun, in_max_prun = analysis_act_value(model, in_loader, args, mask)
+    in_class_prun, in_max_prun, in_feature_value = analysis_act_value(model, in_loader, args, mask)
 
     logger.info(f'top_p: {args.p}')
     # print(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
     # logger.info(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
 
-    print(f'in_data: {args.in_dataset}, mean_in_class_prun: {in_class_prun.mean(0)}, max_prun: {in_max_prun.mean(0)}')
-    logger.info(f'in_data: {args.in_dataset}, mean_in_class_prun: {in_class_prun.mean(0)}, max_prun: {in_max_prun.mean(0)}')
+    print(f'in_data: {args.in_dataset}, mean_in_class_prun: {in_class_prun.mean(0)}, max_prun: {in_max_prun.mean(0)}, rate1: {(in_class_prun/in_max_prun).mean(0)}, avg_value: {in_feature_value.mean(0)}, rate2: {(in_class_prun/in_feature_value).mean(0)}')
+    logger.info(f'in_data: {args.in_dataset}, mean_in_class_prun: {in_class_prun.mean(0)}, max_prun: {in_max_prun.mean(0)}, rate1: {(in_class_prun/in_max_prun).mean(0)}, avg_value: {in_feature_value.mean(0)}, rate2: {(in_class_prun/in_feature_value).mean(0)}')
 
     if args.out_dataset is not None:
         out_dataset = args.out_dataset
@@ -619,15 +919,125 @@ def analysis(args):
             in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
             start_time = time.time()
             # out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
-            out_class_prun, out_max_prun = analysis_act_value(model, out_loader, args, mask)
-            # analysis_score(args, in_right, out_right, out_dataset)
+            out_class_prun, out_max_prun, out_feature_value = analysis_act_value(model, out_loader, args, mask)
+            analysis_score(args, in_class_prun/in_feature_value, out_class_prun/out_feature_value, out_dataset)
             # print(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
             # logger.info(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
 
-            print(f'in_data: {args.in_dataset}, mean_out_class_prun: {out_class_prun.mean(0)}, max_prun: {out_max_prun.mean(0)}')
-            logger.info(f'in_data: {args.in_dataset}, mean_out_class_prun: {out_class_prun.mean(0)}, max_prun: {out_max_prun.mean(0)}')
+            print(f'out_data: {out_dataset}, mean_out_class_prun: {out_class_prun.mean(0)}, max_prun: {out_max_prun.mean(0)}, rate1: {(out_class_prun/out_max_prun).mean(0)}, avg_value: {out_feature_value.mean(0)}, rate2: {(out_class_prun/out_feature_value).mean(0)}')
+            logger.info(f'out_data: {out_dataset}, mean_out_class_prun: {out_class_prun.mean(0)}, max_prun: {out_max_prun.mean(0)}, rate1: {(out_class_prun/out_max_prun).mean(0)}, avg_value: {out_feature_value.mean(0)}, rate2: {(out_class_prun/out_feature_value).mean(0)}')
             end_time = time.time()
 
+def test_confidence(model, data_loader, args, mask):
+    pred_count = []
+    pred2 = []
+    pred1_softmax = []
+    pred2_softmax = []
+    m = torch.nn.Softmax(dim=-1).cuda()
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+            x1, _ = torch.max(m(output), dim=-1)
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, args.p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            scale = s1/s2
+            # cp = cp * torch.exp(scale[:, None])
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(cp)
+            x2, _ = torch.max(m(logits), dim=-1)
+            pred_y2 = torch.max(logits, 1)[1].cpu().numpy()
+            # print(x1, x2, pred_y2)
+            # confs.extend(conf.data.cpu().numpy())
+            pred_count.extend(pred_y==pred_y2)
+            pred1_softmax.extend(x1.data.cpu().numpy())
+            pred2_softmax.extend(x2.data.cpu().numpy())
+
+    return np.array(pred_count), np.array(pred1_softmax), np.array(pred2_softmax)
+
+def analysis_confidence(args):
+    # args.logdir='analysis_feature/prun_num'
+    args.logdir='analysis_feature/confidence'
+    logger = log.setup_logger(args)
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    mask = get_class_mean(args)
+    model.eval()
+    # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
+    in_pred_count, in_ori_smscore, in_prun_smscore = test_confidence(model, in_loader, args, mask)
+
+    logger.info(f'top_p: {args.p}')
+    # print(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
+    # logger.info(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
+
+    print(f'in_data: {args.in_dataset}, maintain_num: {in_pred_count.sum()}, total count: {in_pred_count.size}, origin_softmax: {in_ori_smscore.mean(0)}, prun_softmax: {in_prun_smscore.mean(0)}')
+    logger.info(f'in_data: {args.in_dataset}, maintain_num: {in_pred_count.sum()}, total count: {in_pred_count.size}, origin_softmax: {in_ori_smscore.mean(0)}, prun_softmax: {in_prun_smscore.mean(0)}')
+
+    if args.out_dataset is not None:
+        out_dataset = args.out_dataset
+        loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+        out_loader = loader_out_dict.val_ood_loader
+
+        in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+        start_time = time.time()
+        out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
+        end_time = time.time()
+
+    
+    else:
+        out_datasets = []
+        AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+        if in_dataset == "imagenet":
+            out_datasets = imagenet_out_datasets
+        else:
+            out_datasets = cifar_out_datasets
+        for out_dataset in out_datasets:
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+            
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+            start_time = time.time()
+            # out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+            out_pred_count, out_ori_smscore, out_prun_smscore = test_confidence(model, out_loader, args, mask)
+            # analysis_score(args, in_class_prun/in_feature_value, out_class_prun/out_feature_value, out_dataset)
+            # print(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
+            # logger.info(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
+            
+
+            logger.info(f'top_p: {args.p}')
+            print(f'out_data: {out_dataset}, maintain_num: {out_pred_count.sum()}, total count: {out_pred_count.size}, origin_softmax: {out_ori_smscore.mean(0)}, prun_softmax: {out_prun_smscore.mean(0)}')
+            logger.info(f'out_data: {out_dataset}, maintain_num: {out_pred_count.sum()}, total count: {out_pred_count.size}, origin_softmax: {out_ori_smscore.mean(0)}, prun_softmax: {out_prun_smscore.mean(0)}')
+            end_time = time.time()
 
 def main(args):
     logger = log.setup_logger(args)
@@ -800,20 +1210,21 @@ def test_train(args):
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
     mask = get_class_mean(args)
-    train_acc = test_model_mask(model, train_dataloader, mask)
+    train_acc = test_model_mask(model, train_dataloader, mask, args.p)
     print(f'mask_train_acc = {train_acc}')
     model.eval()
     in_right, in_sum = analysis_act_num(model, train_dataloader, args, mask)
-
+    in_class_prun, in_max_prun = analysis_act_value(model, train_dataloader, args, mask)
     print(f'train_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
-
+    print(f'train_data: {args.in_dataset}, mean_in_class_prun: {in_class_prun.mean(0)}, max_prun: {in_max_prun.mean(0)}, rate: {in_class_prun.mean(0)/in_max_prun.mean(0)}')
 
 
 
 if __name__ == "__main__":
     parser = get_argparser()
 
-    analysis(parser.parse_args())
-    # main(parser.parse_args())
+    # analysis(parser.parse_args())
+    # analysis_confidence(parser.parse_args())
+    main(parser.parse_args())
     # test_train(parser.parse_args())
     
