@@ -49,6 +49,8 @@ def get_argparser():
     parser.add_argument('--p', default=None, type=int, help='dice sparsity level')
     parser.add_argument('--gpu', default='0', type=str, help='gpu index')
     parser.add_argument('--bats', default=0, type=int, help='Using BATS to boost the performance or not.')
+    parser.add_argument('--p-w', default=10, type= int, help='weight sparsity level')
+    parser.add_argument('--p-a', default=10, type= int, help='activation sparsity level')
 
     # arguments for ODIN
     parser.add_argument('--temperature_odin', default=1000, type=int,

@@ -145,6 +145,13 @@ class DenseNet3(nn.Module):
         out = self.fc(out)
         return out
 
+    def forward_threshold_features(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = F.avg_pool2d(feat, 8)
+        feat = feat.clip(max=threshold)
+        feat = feat.view(-1, self.in_planes) 
+        return feat
+
     def forward_features(self, x):
         feat = self.features(x)
         feat = F.avg_pool2d(feat, 8)

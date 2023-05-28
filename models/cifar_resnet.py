@@ -273,6 +273,13 @@ class ResNetCifar(AbstractResNet):
     def forward_head(self, feat):
         out = self.fc(feat)
         return out
+    
+    def forward_threshold_features(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.avgpool(feat)
+        feat = feat.clip(max=threshold)
+        feat = feat.view(feat.size(0), -1)  
+        return feat
 
     def forward(self, x, fc_params=None):
         feat = self.features(x)

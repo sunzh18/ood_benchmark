@@ -25,12 +25,13 @@ from torchvision import transforms
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import pandas as pd
 from scipy.stats import norm
 from scipy.stats import laplace
 import torch.nn.functional as F
 
 
-def get_features(args, model, dataloader):
+def get_features(args, model, dataloader, mask=None):
     features = []
     for b, (x, y) in enumerate(dataloader):
         with torch.no_grad():
@@ -42,13 +43,13 @@ def get_features(args, model, dataloader):
             # feature = feature.view(feature.size(0), -1)
             # print(feature.size())
             # features.extend(feature.data.cpu().numpy())
-            features.extend(feature)
+            features.extend(feature.data.cpu().numpy())
             # x = feature[feature>=0]
             # print(x.size())
 
-    # features = np.array(features)
-    # # x = np.transpose(features)
-    # print(features.shape)
+    features = np.array(features)
+    # x = np.transpose(features)
+    print(features.shape)
 
     return features
 
@@ -72,12 +73,13 @@ def get_class_mean(args):
     print(mask.shape)
     for i in range(mask.shape[0]):
         mask[i] = np.where(class_mean[i] >= thresh[i],1,0)
+        class_mean[i,:] = class_mean[i,:] * mask[i,:]
     # mask = np.where(class_mean>thresh,1,0)
-    
+
     # print(mask)
     index = np.argwhere(mask == 1)
     mask = torch.tensor(mask)
-    return mask
+    return mask, torch.tensor(class_mean)
     # train_acc = test_model(model, train_dataloader, mask)
     # print(f'tran_acc = {train_acc}')
     
@@ -341,9 +343,12 @@ def iterate_data_my6(data_loader, model, temper, mask, p):
                 counter_cp = counter_cp + 1
 
             # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
+            # s1 = cp.sum(dim=1)
+            # s2 = feature_prun.sum(dim=1)
+            s1 = cp.norm(p=1, dim=1)
+            s2 = feature_prun.norm(p=1, dim=1)
             scale = s2/(s2-s1)
+            # scale = s1/s2
             # cp = cp * torch.exp(scale[:, None])
             # scale = scale + 1
             cp = cp * scale[:, None]
@@ -449,9 +454,10 @@ def iterate_data_my9(data_loader, model, temper, mask, p):
             # print(feature_prun, cp, feature)
             s1 = cp.sum(dim=1)
             s2 = feature_prun.sum(dim=1)
-            # scale = s1/s2
-            scale = s2/(s2-s1)
+            scale = s1/s2
+            # scale = s2/(s2-s1)
             # cp = cp * scale[:, None]
+            cp = cp * torch.exp(scale[:, None])
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
@@ -498,6 +504,115 @@ def iterate_data_my10(data_loader, model, temper, mask, p):
             # conf = conf * scale
             confs.extend(conf.data.cpu().numpy())
 
+    return np.array(confs)
+
+def iterate_data_my11(data_loader, model, temper, mask, p):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, args.threshold)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            scale = s1/s2
+            # scale = s2/(s2-s1)
+            # cp = cp * scale[:, None]
+            cp = cp * torch.exp(scale[:, None])
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(cp)
+            conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            scale2 = s1/s2
+            # conf = conf * scale
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my12(data_loader, model, temper, mask, p, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                # feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda() 
+                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
+                counter_cp = counter_cp + 1
+
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+            # conf = conf * scale
+            # cos_sim = torch.exp(cos_sim)
+            confs.extend(cos_sim.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my13(data_loader, model, temper, mask, p, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, args.threshold)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                # feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda() 
+                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
+                counter_cp = counter_cp + 1
+
+            cos_sim = F.cosine_similarity(cp, class_mask, dim=1)
+
+            # conf = conf * scale
+            cp = cp * torch.exp(cos_sim[:, None])
+            # cp = cp * scale[:, None]
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(cp)
+            conf = temper * (torch.logsumexp(logits / (temper), dim=1))
+            confs.extend(conf.data.cpu().numpy())
+           
     return np.array(confs)
 
 def iterate_data_ashp(data_loader, model, temper, p):
@@ -576,7 +691,7 @@ def test_mask(args):
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
 
-    mask = get_class_mean(args)
+    mask, class_mean = get_class_mean(args)
     # val_acc = test_model_mask(model, in_loader, mask)
     # print(f'mask_val_acc = {val_acc}')
     
@@ -585,7 +700,7 @@ def test_mask(args):
     return 
 
 
-def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_dataset, mask):
+def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_dataset, mask, class_mean):
     # switch to evaluate mode
     model.eval()
 
@@ -711,25 +826,55 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my10(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score11':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my11(in_loader, model, args.temperature_energy, mask, p)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my11(out_loader, model, args.temperature_energy, mask, p)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score12':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my12(in_loader, model, args.temperature_energy, mask, p, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my12(out_loader, model, args.temperature_energy, mask, p, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score13':
+        p = 0
+        if args.p:
+            p = args.p
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_my13(in_loader, model, args.temperature_energy, mask, p, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my13(out_loader, model, args.temperature_energy, mask, p, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
     
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
-    
-    # result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
-    # fp = open(result_path,'a+')
-    # result = []
+    # if args.in_dataset == "imagenet":
+    #     result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    #     fp = open(result_path,'a+')
+    #     result = []
 
-    # result.append(f'p: {args.p}')
-    # result.append(out_dataset)
-    # result.append("{:.4f}".format(auroc))
-    # result.append("{:.4f}".format(aupr_in))
-    # result.append("{:.4f}".format(aupr_out))
-    # result.append("{:.4f}".format(fpr95))
-    # context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-    # context.writerow(result)
-    # fp.close()
+    #     result.append(f'p: {args.p}')
+    #     result.append(out_dataset)
+    #     result.append("{:.4f}".format(auroc))
+    #     result.append("{:.4f}".format(aupr_in))
+    #     result.append("{:.4f}".format(aupr_out))
+    #     result.append("{:.4f}".format(fpr95))
+    #     context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+    #     context.writerow(result)
+    #     fp.close()
 
     logger.info('============Results for {}============'.format(args.score))
     logger.info('=======in dataset: {}; ood dataset: {}============'.format(args.in_dataset, out_dataset))
@@ -842,6 +987,106 @@ def analysis_act_value(model, data_loader, args, mask):
     print(class_prun.shape, max_prun.shape, feature_value.shape)
     return class_prun, max_prun, feature_value
 
+def analysis_act_value_react(model, data_loader, args, mask):
+    p = 0
+    if args.p:
+        p = args.p
+    class_prun = []
+    max_prun = []
+    feature_value = []
+    with torch.no_grad():
+        for data,target in tqdm(data_loader):
+            data, target = data.cuda(), target.cuda()
+    #         print(data.shape, data)
+            output = model(data)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(data, args.threshold)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            s1 = cp.sum(dim=1)
+            s2 = feature_prun.sum(dim=1)
+            s3 = feature.sum(dim=1)
+            class_prun.extend(s1.cpu().numpy())
+            max_prun.extend(s2.cpu().numpy())
+            feature_value.extend(s3.cpu().numpy())
+    #         print(f'right:{right}, count:{count}')
+    # #         logits = model.forward_head(cp)
+    #         pred_y = torch.max(logits, 1)[1].cpu().numpy()
+    #         y_label = target.cpu().numpy()
+    #         accu += (pred_y == y_label).sum()
+    # #         print(pred_y, y_label)
+    # #         print(accu1 / num1, accu2 / num2)
+
+    #         num += len(y_label)
+    class_prun = np.array(class_prun)
+    max_prun = np.array(max_prun)
+    feature_value = np.array(feature_value)
+    print(class_prun.shape, max_prun.shape, feature_value.shape)
+    return class_prun, max_prun, feature_value
+
+def analysis_act_value_l2(model, data_loader, args, mask):
+    p = 0
+    if args.p:
+        p = args.p
+    class_prun = []
+    max_prun = []
+    feature_value = []
+    with torch.no_grad():
+        for data,target in tqdm(data_loader):
+            data, target = data.cuda(), target.cuda()
+    #         print(data.shape, data)
+            output = model(data)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(data)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            cp_norm = cp.norm(p=2, dim=1)
+            prun_norm = feature_prun.norm(p=2, dim=1)
+            feature_norm = feature.norm(p=2, dim=1)
+            class_prun.extend(cp_norm.cpu().numpy())
+            max_prun.extend(prun_norm.cpu().numpy())
+            feature_value.extend(feature_norm.cpu().numpy())
+    #         print(f'right:{right}, count:{count}')
+    # #         logits = model.forward_head(cp)
+    #         pred_y = torch.max(logits, 1)[1].cpu().numpy()
+    #         y_label = target.cpu().numpy()
+    #         accu += (pred_y == y_label).sum()
+    # #         print(pred_y, y_label)
+    # #         print(accu1 / num1, accu2 / num2)
+
+    #         num += len(y_label)
+    class_prun = np.array(class_prun)
+    max_prun = np.array(max_prun)
+    feature_value = np.array(feature_value)
+    print(class_prun.shape, max_prun.shape, feature_value.shape)
+    return class_prun, max_prun, feature_value
+
 def analysis_score(args, in_examples, out_examples, out_dataset):
     # fmean = np.mean(features, axis=0)
     # m = min(fmean)
@@ -862,9 +1107,79 @@ def analysis_score(args, in_examples, out_examples, out_dataset):
     
     plt.close()
 
+def analysis_feature_unit(args, in_examples, out_examples, out_dataset):
+    path = f'analysis_feature/feature_unit/{args.name}/{args.in_dataset}/{args.model}/{args.score}'
+    if not os.path.isdir(path):
+        os.makedirs(path)
+    save_pic_filename=f'{path}/{args.in_dataset}_{out_dataset}.png'
+    # fig, ax = plt.subplots(figsize=(8, 4))
+    df_in = pd.DataFrame(in_examples)
+    df_out = pd.DataFrame(out_examples)
+    # 计算每个维度的均值和方差
+    stats_in = df_in.describe().loc[['mean', 'std'], :]
+    stats_out = df_out.describe().loc[['mean', 'std'], :]
+
+    # 将数据集转换为长格式
+    df_long_in = pd.melt(df_in, var_name='channel', value_name='Value')
+    df_long_out = pd.melt(df_out, var_name='channel', value_name='Value')
+    df_long_in.insert(loc=0, column='data', value=f'{args.in_dataset}')
+    df_long_out.insert(loc=0, column='data', value=f'{out_dataset}')
+
+    df_long=pd.concat([df_long_in,df_long_out],axis=0)
+    # print(df_long)
+    # 绘制统计图
+    # sns.boxplot(x='channel', y='Value', hue='data', data=df_long)
+    # sns.pointplot(x='channel', y='Value', hue='data', data=df_long)
+    sns.stripplot(x='channel', y='Value', hue='data', data=df_long)
+    
+    # sns.kdeplot(data=in_examples, label='{}, mean{:.1f}, std{:.1f}'.format(args.in_dataset, in_examples.mean(0), in_examples.std(0)), color='crimson', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    # sns.kdeplot(data=out_examples, label='{}, mean{:.1f}, std{:.1f}'.format(out_dataset, out_examples.mean(0), out_examples.std(0)), color='limegreen', fill=True, common_norm=True, alpha=.5, linewidth=0, legend=True, ax = ax)
+    # ax.legend(loc="upper right")
+    # plt.xlim(0, m * 10)
+    plt.savefig(save_pic_filename,dpi=600)
+    
+    plt.close()
+
+def analysis_act_value_cos(model, data_loader, args, mask, class_mean):
+    p = 0
+    if args.p:
+        p = args.p
+    Cos_sim = []
+    
+    with torch.no_grad():
+        for data,target in tqdm(data_loader):
+            data, target = data.cuda(), target.cuda()
+    #         print(data.shape, data)
+            output = model(data)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(data)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
+                counter_cp = counter_cp + 1
+
+            cos_sim = F.cosine_similarity(cp, class_mask, dim=1)
+            Cos_sim.extend(cos_sim.cpu().numpy())
+
+
+
+    #         num += len(y_label)
+    Cos_sim = np.array(Cos_sim)
+    print(Cos_sim.shape)
+    return Cos_sim
+
 def analysis(args):
     # args.logdir='analysis_feature/prun_num'
-    args.logdir='analysis_feature/prun_value'
+    # args.logdir='analysis_feature/prun_value_l2norm'
+    args.logdir='analysis_feature/prun_react_value'
     logger = log.setup_logger(args)
     in_dataset = args.in_dataset
 
@@ -881,10 +1196,10 @@ def analysis(args):
         load_ckpt = True
 
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    mask = get_class_mean(args)
+    mask, class_mean = get_class_mean(args)
     model.eval()
     # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
-    in_class_prun, in_max_prun, in_feature_value = analysis_act_value(model, in_loader, args, mask)
+    in_class_prun, in_max_prun, in_feature_value = analysis_act_value_react(model, in_loader, args, mask)
 
     logger.info(f'top_p: {args.p}')
     # print(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
@@ -901,7 +1216,7 @@ def analysis(args):
         in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
         start_time = time.time()
         out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
-        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
+        in_class_prun, in_max_prun = analysis_act_value_react(model, out_loader, args, mask)
         end_time = time.time()
 
     
@@ -919,8 +1234,8 @@ def analysis(args):
             in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
             start_time = time.time()
             # out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
-            out_class_prun, out_max_prun, out_feature_value = analysis_act_value(model, out_loader, args, mask)
-            analysis_score(args, in_class_prun/in_feature_value, out_class_prun/out_feature_value, out_dataset)
+            out_class_prun, out_max_prun, out_feature_value = analysis_act_value_react(model, out_loader, args, mask)
+            # analysis_score(args, in_class_prun/in_feature_value, out_class_prun/out_feature_value, out_dataset)
             # print(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
             # logger.info(f'out_data: {out_dataset}, mean_out_num: {out_right.mean(0)}, sum: {out_sum.mean(0)}')
 
@@ -990,7 +1305,7 @@ def analysis_confidence(args):
         load_ckpt = True
 
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    mask = get_class_mean(args)
+    mask, class_mean = get_class_mean(args)
     model.eval()
     # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
     in_pred_count, in_ori_smscore, in_prun_smscore = test_confidence(model, in_loader, args, mask)
@@ -1039,6 +1354,121 @@ def analysis_confidence(args):
             logger.info(f'out_data: {out_dataset}, maintain_num: {out_pred_count.sum()}, total count: {out_pred_count.size}, origin_softmax: {out_ori_smscore.mean(0)}, prun_softmax: {out_prun_smscore.mean(0)}')
             end_time = time.time()
 
+def analysis_feature(args):
+    args.logdir='analysis_feature/feature_unit'
+    logger = log.setup_logger(args)
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    mask, class_mean = get_class_mean(args)
+    model.eval()
+    # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
+    in_features = get_features(args, model, in_loader, mask)
+
+    if args.out_dataset is not None:
+        out_dataset = args.out_dataset
+        loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+        out_loader = loader_out_dict.val_ood_loader
+
+        in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+        start_time = time.time()
+        out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
+        end_time = time.time()
+
+    
+    else:
+        out_datasets = []
+        AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+        if in_dataset == "imagenet":
+            out_datasets = imagenet_out_datasets
+        else:
+            out_datasets = cifar_out_datasets
+        for out_dataset in out_datasets:
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+            
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+            start_time = time.time()
+            # out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+            out_features = get_features(args, model, out_loader, mask)
+            analysis_feature_unit(args, in_features, out_features, out_dataset)
+
+def analysis_cos(args):
+    # args.logdir='analysis_feature/prun_num'
+    args.logdir='analysis_feature/cosine_similarity'
+    logger = log.setup_logger(args)
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    mask, class_mean = get_class_mean(args)
+    model.eval()
+    # in_right, in_sum = analysis_act_num(model, in_loader, args, mask)
+    in_cos_sim = analysis_act_value_cos(model, in_loader, args, mask, class_mean)
+
+    logger.info(f'top_p: {args.p}')
+    # print(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
+    # logger.info(f'in_data: {args.in_dataset}, mean_in_num: {in_right.mean(0)}, sum: {in_sum.mean(0)}')
+
+    print(f'in_data: {args.in_dataset}, cos_sim: {in_cos_sim.mean(0)}')
+    logger.info(f'in_data: {args.in_dataset}, cos_sim: {in_cos_sim.mean(0)}')
+
+    if args.out_dataset is not None:
+        out_dataset = args.out_dataset
+        loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+        out_loader = loader_out_dict.val_ood_loader
+
+        in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+        start_time = time.time()
+        out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
+        end_time = time.time()
+
+    
+    else:
+        out_datasets = []
+        AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+        if in_dataset == "imagenet":
+            out_datasets = imagenet_out_datasets
+        else:
+            out_datasets = cifar_out_datasets
+        for out_dataset in out_datasets:
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+            
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+            start_time = time.time()
+            # out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
+            out_cos_sim = analysis_act_value_cos(model, out_loader, args, mask, class_mean)
+            print(f'out_data: {out_dataset}, cos_sim: {out_cos_sim.mean(0)}')
+            logger.info(f'out_data: {out_dataset}, cos_sim: {out_cos_sim.mean(0)}')
+            end_time = time.time()
+
+
 def main(args):
     logger = log.setup_logger(args)
 
@@ -1072,7 +1502,7 @@ def main(args):
         load_ckpt = True
 
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    mask = get_class_mean(args)
+    mask, class_mean = get_class_mean(args)
     model.eval()
 
     if args.out_dataset is not None:
@@ -1086,7 +1516,7 @@ def main(args):
 
 
         start_time = time.time()
-        run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask)
+        run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean)
         end_time = time.time()
 
         logger.info("Total running time: {}".format(end_time - start_time))
@@ -1107,7 +1537,7 @@ def main(args):
             logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
 
             start_time = time.time()
-            auroc, aupr_in, aupr_out, fpr95 = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask)
+            auroc, aupr_in, aupr_out, fpr95 = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean)
             end_time = time.time()
 
             logger.info("Total running time: {}".format(end_time - start_time))
@@ -1125,7 +1555,7 @@ def main(args):
         fp = open(result_path,'a+')
         result = []
 
-        result.append(f'p: {args.p}')
+        result.append(f'p: {args.p}/threshold{args.threshold}')
         result.append('Average')
         result.append("{:.4f}".format(avg_auroc))
         result.append("{:.4f}".format(avg_aupr_in))
@@ -1223,8 +1653,19 @@ def test_train(args):
 if __name__ == "__main__":
     parser = get_argparser()
 
-    # analysis(parser.parse_args())
-    # analysis_confidence(parser.parse_args())
-    main(parser.parse_args())
-    # test_train(parser.parse_args())
+    args = parser.parse_args()
+    if args.in_dataset == "CIFAR-10":
+        args.threshold = 1.5
+
+    elif args.in_dataset == "CIFAR-100":
+        args.threshold = 1.5
+
+    elif args.in_dataset == "imagenet":
+        args.threshold = 0.6
+    # analysis(args)
+    # analysis_confidence(args)
+    # analysis_feature(args)
+    # analysis_cos(args)
+    main(args)
+    # test_train(args)
     
