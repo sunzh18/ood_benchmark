@@ -1661,7 +1661,7 @@ if __name__ == "__main__":
         args.threshold = 1.5
 
     elif args.in_dataset == "imagenet":
-        args.threshold = 0.6
+        args.threshold = 0.8
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)
