@@ -141,6 +141,15 @@ class AbstractResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000):
         super(AbstractResNet, self).__init__()
+        self.gradients = []
+        self.activations = []
+        self.handles_list = []
+        self.integrad_handles_list = []
+        self.integrad_scores = []
+        self.integrad_calc_activations_mask = []
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.pruned_activations_mask = []
+        
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
@@ -193,6 +202,16 @@ class AbstractResNet(nn.Module):
         x = self.fc(x)
         return x
 
+    def _forward(self, x):
+        self.activations = []
+        self.gradients = []
+        self.zero_grad()
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
     def load_state_dict(self, state_dict, strict=True):
         missing_keys = []
         unexpected_keys = []
@@ -227,21 +246,63 @@ class AbstractResNet(nn.Module):
 
         if len(error_msgs) > 0:
             print('Warning(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
+        # LINE 
+    def remove_handles(self):
+        for handle in self.handles_list:
+            handle.remove()
+        self.handles_list.clear()
+        self.activations = []
+        self.gradients = []
+    # LINE 
+    def _compute_taylor_scores(self, inputs, labels):
+        self._hook_layers()
+        outputs = self._forward(inputs)
+        outputs[0, labels.item()].backward(retain_graph=True)
 
+        first_order_taylor_scores = []
+        self.gradients.reverse()
+
+        for i, layer in enumerate(self.activations):
+            first_order_taylor_scores.append(torch.mul(layer, self.gradients[i]))
+                
+        self.remove_handles()
+        return first_order_taylor_scores, outputs
+    # LINE 
+    def _hook_layers(self):
+        def backward_hook_relu(module, grad_input, grad_output):
+            self.gradients.append(grad_output[0].to(self.device))
+
+        def forward_hook_relu(module, input, output):
+            # mask output by pruned_activations_mask
+            # In the first model(input) call, the pruned_activations_mask
+            # is not yet defined, thus we check for emptiness
+            if self.pruned_activations_mask:
+              output = torch.mul(output, self.pruned_activations_mask[len(self.activations)].to(self.device)) #+ self.pruning_biases[len(self.activations)].to(self.device)
+            self.activations.append(output.to(self.device))
+            return output
+
+        for module in self.modules():
+            if isinstance(module, nn.AvgPool2d):
+                self.handles_list.append(module.register_forward_hook(forward_hook_relu))
+                self.handles_list.append(module.register_backward_hook(backward_hook_relu))
 
 class ResNetCifar(AbstractResNet):
-    def __init__(self, block, layers, num_classes=10, method='', p=None, info=None):
+    def __init__(self, block, layers, num_classes=10, method='', p=None, p_w=None, p_a=None, info=None, clip_threshold=1e10, LU = False):
         super(ResNetCifar, self).__init__(block, layers, num_classes)
         self.in_planes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.method = method
-
+        self.clip_threshold = clip_threshold
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
         if p is None or info is None:
             self.fc = nn.Linear(512 * block.expansion, num_classes)
         else:
-            print('use dice')
-            self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
+            if LU:
+                print('use LINE')
+                self.fc = RouteLUNCH(512 * block.expansion, num_classes, p_w=p_w, p_a=p_a, info=info, clip_threshold = clip_threshold)
+            else:
+                print('use dice')
+                self.fc = RouteDICE(512 * block.expansion, num_classes, p=p, info=info)
 
         self.relu = nn.ReLU(inplace=False)
         self.avgpool = nn.AvgPool2d(4, stride=1)

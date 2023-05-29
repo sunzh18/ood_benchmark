@@ -76,8 +76,18 @@ class DenseBlock(nn.Module):
 class DenseNet3(nn.Module):
     def __init__(self, depth, num_classes, growth_rate=12,
                  reduction=0.5, bottleneck=True, dropRate=0.0, normalizer = None,
-                 out_classes = 100, p=None, info=None):
+                 out_classes = 100, p=None, p_w=None, p_a=None, info=None, LU=False, clip_threshold=1e10):
         super(DenseNet3, self).__init__()
+
+        self.gradients = []
+        self.activations = []
+        self.handles_list = []
+        self.integrad_handles_list = []
+        self.integrad_scores = []
+        self.integrad_calc_activations_mask = []
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.pruned_activations_mask = []
+        self.clip_threshold = clip_threshold
 
         in_planes = 2 * growth_rate
         n = (depth - 4) / 3
@@ -109,8 +119,12 @@ class DenseNet3(nn.Module):
         if p is None or info is None:
             self.fc = nn.Linear(in_planes, num_classes)
         else:
-            print('use dice')
-            self.fc = RouteDICE(in_planes, num_classes, p=p, info=info)
+            if LU:
+                print('use LINE')
+                self.fc = RouteLUNCH(in_planes, num_classes, p_w=p_w, p_a=p_a, info=info)
+            else:
+                print('use dice')
+                self.fc = RouteDICE(in_planes, num_classes, p=p, info=info)
 
         self.in_planes = in_planes
         self.normalizer = normalizer
@@ -235,3 +249,50 @@ class DenseNet3(nn.Module):
         out = F.avg_pool2d(penultimate, 8)
         out = out.view(-1, self.in_planes)
         return self.fc(out), penultimate
+    
+    def _forward(self, x):
+        self.activations = []
+        self.gradients = []
+        self.zero_grad()
+        
+        out = self.features(x)
+        out = F.avg_pool2d(out, 8)
+        out = out.view(-1, self.in_planes)
+        out = self.fc(out)
+        return out
+    #LINE
+    def remove_handles(self):
+        for handle in self.handles_list:
+            handle.remove()
+        self.handles_list.clear()
+        self.activations = []
+        self.gradients = []
+    #LINE
+    def _compute_taylor_scores(self, inputs, labels):
+        self._hook_layers()
+        outputs = self._forward(inputs)
+        outputs[0, labels.item()].backward(retain_graph=True)
+
+        first_order_taylor_scores = []
+        self.gradients.reverse()
+
+        for i, layer in enumerate(self.activations):
+            first_order_taylor_scores.append(torch.mul(layer, self.gradients[i]))
+        
+        self.remove_handles()                
+        return first_order_taylor_scores, outputs
+    #LINE
+    def _hook_layers(self):
+        def backward_hook_relu(module, grad_input, grad_output):
+            self.gradients.append(grad_output[0].to(self.device))
+
+        def forward_hook_relu(module, input, output):
+            if self.pruned_activations_mask:
+              output = torch.mul(output, self.pruned_activations_mask[len(self.activations)].to(self.device)) #+ self.pruning_biases[len(self.activations)].to(self.device)
+            self.activations.append(output.to(self.device))
+            return output
+
+        for module in self.modules():
+            if isinstance(module, nn.AvgPool2d):
+                self.handles_list.append(module.register_forward_hook(forward_hook_relu))
+                self.handles_list.append(module.register_backward_hook(backward_hook_relu))
