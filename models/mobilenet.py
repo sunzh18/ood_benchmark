@@ -1,6 +1,9 @@
 from torch import nn
+import torch
+from torch import Tensor
 # from torchvision.models.utils import load_state_dict_from_url
 from torch.hub import load_state_dict_from_url
+from models.route import *
 
 __all__ = ['MobileNetV2', 'mobilenet_v2']
 
@@ -81,7 +84,9 @@ class MobileNetV2(nn.Module):
                  inverted_residual_setting=None,
                  round_nearest=8,
                  block=None,
-                 norm_layer=None):
+                 norm_layer=None,
+                 p=None, p_w=None, p_a=None, info=None, LU=False, clip_threshold=1e10
+                 ):
         """
         MobileNet V2 main class
 
@@ -96,6 +101,17 @@ class MobileNetV2(nn.Module):
 
         """
         super(MobileNetV2, self).__init__()
+
+        self.gradients = []
+        self.activations = []
+        self.handles_list = []
+        self.integrad_handles_list = []
+        self.integrad_scores = []
+        self.integrad_calc_activations_mask = []
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.pruned_activations_mask = []
+        self.clip_threshold = clip_threshold
+
 
         if block is None:
             block = InvertedResidual
@@ -140,11 +156,20 @@ class MobileNetV2(nn.Module):
         self.features = nn.Sequential(*features)
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         # building classifier
-        self.classifier = nn.Sequential(
-            nn.Dropout(0.2),
-            nn.Linear(self.last_channel, num_classes),
-        )
-
+        # self.classifier = nn.Sequential(
+        #     nn.Dropout(0.2),
+        #     nn.Linear(self.last_channel, num_classes),
+        # )
+        if p is None or  info is None:
+            self.classifier = nn.Sequential(nn.Dropout(0.2),
+                nn.Linear(self.last_channel, num_classes))
+        else:
+            if LU:
+                self.classifier = nn.Sequential(nn.Dropout(0.2),
+                    RouteLUNCH(self.last_channel, num_classes, p_w=p_w, p_a=p_a, info=info, clip_threshold = clip_threshold))
+            else:
+                self.classifier = nn.Sequential(nn.Dropout(0.2),
+                    RouteDICE(self.last_channel, num_classes, p=p, info=info))
         # weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -214,7 +239,118 @@ class MobileNetV2(nn.Module):
     def intermediate_forward(self, x, layer_index):
         return self.features(x)
     
+    def _forward(self, x: Tensor) -> Tensor:
+        self.activations = []
+        self.gradients = []
+        self.zero_grad()        
+        # This exists since TorchScript doesn't support inheritance, so the superclass method
+        # (this one) needs to have a name other than `forward` that can be accessed in a subclass
+        x = self.features(x)
+        # Cannot use "squeeze" as batch-size can be 1
+        x = self.avgpool(x)
+        # x = apply_ash(x, method=getattr(self, 'ash_method'))
+        # x = torch.flatten(x, 1)
+        x = x.view(x.size(0), -1)
+        x = x = self.classifier(x)
+        return x
 
+    def remove_handles(self):
+        for handle in self.handles_list:
+            handle.remove()
+        self.handles_list.clear()
+        self.activations = []
+        self.gradients = []
+
+    def _compute_taylor_scores(self, inputs, labels):
+        self._hook_layers()
+        outputs = self._forward(inputs)
+        outputs[0, labels.item()].backward(retain_graph=True)
+
+        first_order_taylor_scores = []
+        self.gradients.reverse()
+
+        for i, layer in enumerate(self.activations):
+            first_order_taylor_scores.append(torch.mul(layer, self.gradients[i]))
+                
+        self.remove_handles()
+        return first_order_taylor_scores, outputs
+    
+    def _init_integrad_mask(self, inputs):
+        self.integrad_calc_activations_mask = []
+        _ = self._forward(inputs)
+        for a in self.activations:
+            self.integrad_calc_activations_mask.append(torch.ones(a.shape))
+    
+    def _calc_integrad_scores(self, inputs, labels, iterations):
+        def forward_hook_relu(module, input, output):
+            output = torch.mul(output, self.integrad_calc_activations_mask[len(self.activations)-1].to(self.device))
+            return output
+
+        self._hook_layers()
+        initial_output = self._initialize_pruned_mask(inputs)
+        output = self._forward(inputs)
+        output[0, labels.item()].backward(retain_graph=True)
+
+        original_activations = []
+        for a in self.activations:
+            original_activations.append(a.detach().clone())
+
+        self._init_integrad_mask(inputs)
+        mask_step = 1./iterations
+        i = 0
+        for module in self.modules():
+            if isinstance(module, nn.AvgPool2d):
+            # if isinstance(module, nn.ReLU):
+               self.integrad_scores.append(torch.zeros(original_activations[i].shape).to(self.device))
+               self.integrad_calc_activations_mask[i] = torch.zeros(self.integrad_calc_activations_mask[i].shape)
+               self.integrad_handles_list.append(module.register_forward_hook(forward_hook_relu))
+
+               for j in range(iterations+1):
+                   self.integrad_calc_activations_mask[i] += j*mask_step
+                   output = self._forward(inputs)
+                   output[0, labels.item()].backward(retain_graph=True)
+                   self.gradients.reverse()
+                   self.integrad_scores[len(self.integrad_scores)-1] += self.gradients[i]
+               self.integrad_scores[len(self.integrad_scores)-1] = self.integrad_scores[len(self.integrad_scores)-1]/(iterations+1) * original_activations[i]
+               self.integrad_calc_activations_mask[i] = torch.ones(self.integrad_calc_activations_mask[i].shape)
+               self.integrad_handles_list[0].remove()
+               self.integrad_handles_list.clear()
+               i += 1
+        inte_scores = []
+        for layer_scores in self.integrad_scores:
+            inte_scores.append(layer_scores)
+        self.integrad_scores = []
+        self.remove_handles()       
+        return inte_scores, output
+
+    def _initialize_pruned_mask(self, inputs):
+        output = self._forward(inputs)
+
+        # initializing pruned_activations_mask
+        for layer in self.activations:
+            self.pruned_activations_mask.append(torch.ones(layer.size()).to(self.device))
+        return output
+    
+    def _hook_layers(self):
+        def backward_hook_relu(module, grad_input, grad_output):
+            self.gradients.append(grad_output[0].to(self.device))
+
+        def forward_hook_relu(module, input, output):
+            # mask output by pruned_activations_mask
+            # In the first model(input) call, the pruned_activations_mask
+            # is not yet defined, thus we check for emptiness
+            if self.pruned_activations_mask:
+              output = torch.mul(output, self.pruned_activations_mask[len(self.activations)].to(self.device)) #+ self.pruning_biases[len(self.activations)].to(self.device)
+            self.activations.append(output.to(self.device))
+            return output
+        
+        i = 0
+        for module in self.modules():
+            if isinstance(module, nn.AvgPool2d):
+            # if isinstance(module, nn.ReLU):
+            # if isinstance(module, resnet.BasicBlock):
+                self.handles_list.append(module.register_forward_hook(forward_hook_relu))
+                self.handles_list.append(module.register_backward_hook(backward_hook_relu))
 
 def mobilenet_v2(pretrained=False, progress=True, **kwargs):
     """

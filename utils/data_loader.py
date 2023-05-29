@@ -69,7 +69,7 @@ def get_dataloader_in(args, config_type='default', split=('train', 'val')):
 
     train_loader, val_loader, trainset, valset, lr_schedule, num_classes, = None, None, None, None, [50, 75, 90], 0, 
     if args.in_dataset == "CIFAR-10":
-        data_path = '/data/Public/Datasets/cifar10'
+        data_path = '/data15/data15_5/Public/Datasets/cifar10'
         # Data loading code
         if 'train' in split:
             trainset = torchvision.datasets.CIFAR10(root=data_path, train=True, download=False, transform=config.transform_train)
@@ -80,7 +80,7 @@ def get_dataloader_in(args, config_type='default', split=('train', 'val')):
         num_classes = 10
 
     elif args.in_dataset == "CIFAR-100":
-        data_path = '/data/Public/Datasets/cifar100'
+        data_path = '/data15/data15_5/Public/Datasets/cifar100'
         # Data loading code
         if 'train' in split:
             trainset = torchvision.datasets.CIFAR100(root=data_path, train=True, download=False, transform=config.transform_train)
@@ -91,7 +91,7 @@ def get_dataloader_in(args, config_type='default', split=('train', 'val')):
         num_classes = 100
 
     elif args.in_dataset == "imagenet100":
-        root = '/data/Public/Datasets/ImageNet100'
+        root = '/data15/data15_5/Public/Datasets/ImageNet100'
         # Data loading code
         if 'train' in split:
             trainset = torchvision.datasets.ImageFolder(os.path.join(root, 'train'), config.transform_train_largescale)
@@ -103,7 +103,7 @@ def get_dataloader_in(args, config_type='default', split=('train', 'val')):
 
        
     elif args.in_dataset == "imagenet":
-        root = '/data/Public/Datasets/ilsvrc2012'
+        root = '/data15/data15_5/Public/Datasets/ilsvrc2012/ilsvrc2012/'
         # Data loading code
         if 'train' in split:
             trainset = torchvision.datasets.ImageFolder(os.path.join(root, 'train'), config.transform_train_largescale)
@@ -150,40 +150,40 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
         val_dataset = dataset[1]
         batch_size = args.batch
         if val_dataset == 'SVHN':       #cifar
-            valset = SVHN('/data/Public/Datasets/SVHN/', split='test', transform=transform_test, download=False)
+            valset = SVHN('/data15/data15_5/Public/Datasets/SVHN/', split='test', transform=transform_test, download=False)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False,
                                                         num_workers=2)
             
         elif val_dataset == 'Textures':     #imagenet, cifar
             val_transform = config.transform_test_largescale if args.in_dataset in {'imagenet'} else config.transform_test
-            valset = torchvision.datasets.ImageFolder(root="/data/Public/Datasets/dtd/images", transform=val_transform)
+            valset = torchvision.datasets.ImageFolder(root="/data15/data15_5/Public/Datasets/dtd/images", transform=val_transform)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=True, num_workers=2)
         
         
         elif val_dataset == 'Places':   # imagenet, cifar
             val_transform = config.transform_test_largescale if args.in_dataset in {'imagenet'} else config.transform_test
             if args.in_dataset == 'imagenet':
-                valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/Places",
+                valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/OOD_FOR_ImageNet1K/Places",
                                                         transform=val_transform)
             elif args.in_dataset in {'CIFAR-10', 'CIFAR-100'}:
-                valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/places365/test_subset",
+                valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/places365_standard/val",
                                                         transform=val_transform)
             
             
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
         
         elif val_dataset == 'SUN':      # imagenet
-            valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/SUN",
+            valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/OOD_FOR_ImageNet1K/SUN",
                                                         transform=config.transform_test_largescale)
             val_ood_loader = torch.utils.data.DataLoader(valset , batch_size=batch_size, shuffle=False, num_workers=2)
             
         elif val_dataset == 'iNat':     # imagenet
-            valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/iNaturalist",
+            valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/OOD_FOR_ImageNet1K/iNaturalist",
                                                         transform=config.transform_test_largescale)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
             
         elif val_dataset == 'Tinyimagenet':     # cifar
-            valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/tiny-imagenet-200/val/",
+            valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/tiny-imagenet-200/val/",
                                                  transform=transform_test)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
             
@@ -197,7 +197,7 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
         #                                                batch_size=batch_size, shuffle=True, num_workers=2)
             
         else:       #cifar - LSUN-C, LSUN-R, iSUN
-            valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/{}".format(val_dataset),
+            valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/{}".format(val_dataset),
                                                         transform=transform_test)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
 

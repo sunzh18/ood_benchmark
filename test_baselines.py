@@ -49,12 +49,33 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         in_scores = iterate_data_energy(in_loader, model, args.temperature_energy)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
+    elif args.score == 'dice_react':
+        args.threshold = 1.0
+        info = np.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_feat_stat.npy")
+        model = get_model(args, num_classes, load_ckpt=True, info=info)
+        model.eval()
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_react(in_loader, model, args.temperature_energy)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_react(out_loader, model, args.temperature_energy)
     elif args.score == 'react':
-        args.threshold = 2.25
+        args.threshold = 1.0
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
+    elif args.score == 'LINE':
+        args.p_a = 90
+        args.p_w = 90
+        args.threshold = 1.0  #0.8
+        info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
+        model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
+        model.eval()
+        logger.info("Processing in-distribution data...")
+        in_scores = iterate_data_react(in_loader, model, args.temperature_energy)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_react(out_loader, model, args.temperature_energy)
+
     elif args.score == 'GradNorm':
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_gradnorm(in_loader, model, args.temperature_gradnorm, num_classes)
