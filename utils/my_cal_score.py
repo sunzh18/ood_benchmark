@@ -643,7 +643,7 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
                 counter_cp = counter_cp + 1
 
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            # conf = conf * cos_sim
+            conf = conf * cos_sim
             confs.extend(conf.data.cpu().numpy())
 
     return np.array(confs)

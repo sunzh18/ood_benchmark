@@ -189,6 +189,7 @@ class DenseNet3(nn.Module):
         else:
             out = vote.sum(2)
         return out
+        
     def features(self, x):
         if self.normalizer is not None:
             x = x.clone()
