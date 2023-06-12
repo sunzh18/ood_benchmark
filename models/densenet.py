@@ -89,6 +89,8 @@ class DenseNet3(nn.Module):
         self.pruned_activations_mask = []
         self.clip_threshold = clip_threshold
 
+        self.masked_w = None
+
         in_planes = 2 * growth_rate
         n = (depth - 4) / 3
         if bottleneck == True:
@@ -177,6 +179,16 @@ class DenseNet3(nn.Module):
         out = self.fc(feat)
         return out
 
+    def forward_head_mask(self, feat, mask=None):
+        # print(self.fc.weight.shape)
+        if self.masked_w is None:
+            self.masked_w = self.fc.weight * mask
+        vote = feat[:, None, :] * self.masked_w
+        if self.fc.bias is not None:
+            out = vote.sum(2) + self.fc.bias
+        else:
+            out = vote.sum(2)
+        return out
     def features(self, x):
         if self.normalizer is not None:
             x = x.clone()

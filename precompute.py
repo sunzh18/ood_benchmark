@@ -63,9 +63,13 @@ def extact_mean_std(args, model):
         if key == 'layer4.1.bn2.bias':
             # print(f'mean: {v}')
             mean = v
-        
 
         # print(f'{key}')
+        if key == 'fc.weight':
+            fc_w = v
+            print(v.shape)
+            print(f'fc: {v}')
+        
         #wideresnet, densenet
         if key == 'bn1.weight':
             # print(f'var: {v}')
@@ -74,15 +78,51 @@ def extact_mean_std(args, model):
             # print(f'mean: {v}')
             mean = v
 
-    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
-    if not os.path.isdir(file_folder):
-        os.makedirs(file_folder)
+    # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    # if not os.path.isdir(file_folder):
+    #     os.makedirs(file_folder)
     
-    torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
-    torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
-    print(mean)
-    print(std)
+    # torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
+    # torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
+    # print(mean)
+    # print(std)
+    return fc_w.cpu().numpy()
 
+def get_class_mean(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
+    # print(class_mean)
+    class_mean = np.squeeze(class_mean)
+    # print(class_mean.shape)
+    # print(class_mean)
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+
+    p = 0
+    if args.p:
+        p = args.p
+    thresh = np.percentile(class_mean, p, axis=1)
+    thresh_fc = np.percentile(fc_w, p, axis=1)
+
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(class_mean)
+    mask_fc = np.zeros_like(fc_w)
+    count = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(class_mean[i] >= thresh[i],1,0)
+        mask_fc[i] = np.where(fc_w[i] >= thresh_fc[i],1,0)
+        # print(mask[i], mask_fc[i])
+        count[i] = mask[i] * mask_fc[i]
+        class_mean[i,:] = class_mean[i,:] * mask[i,:]
+        print(f"{i} class: mask overlap number:{count[i].sum()}, sum:{mask_fc[i].sum()}")
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
 
 def get_class_mean_precision(args, model, num_classes, train_loader):
     if args.in_dataset == "CIFAR-10" or args.in_dataset == "CIFAR-100":
@@ -283,13 +323,15 @@ def main(args):
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
 
-    # extact_mean_std(args, model)
+    # fc_w = extact_mean_std(args, model)
 
-    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
-    if not os.path.isdir(file_folder):
-        os.makedirs(file_folder)
+    # get_class_mean(args, fc_w)
+
+    # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    # if not os.path.isdir(file_folder):
+    #     os.makedirs(file_folder)
     
-    features = get_features(args, model, train_dataloader)
+    # features = get_features(args, model, train_dataloader)
     # features = torch.tensor([item.cpu().detach().numpy() for item in features]).cuda()
     # print(features.shape)
 
@@ -299,7 +341,7 @@ def main(args):
     # print(features.shape)
     # mean = mean_features.cpu().detach().numpy()
     # np.save(f"{file_folder}/{args.model}_feat_stat.npy", mean)
-    np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
+    # np.save(f"{file_folder}/{args.model}_feat_stat.npy", features.mean(0))
     # np.save(f"{file_folder}/{args.model}_feat_std.npy", features.std(0))
 
     # info = np.load(f"{args.in_dataset}_{args.model}_feat_stat.npy")
@@ -331,5 +373,16 @@ def main(args):
 if __name__ == "__main__":
     parser = get_argparser()
 
-    
-    main(parser.parse_args())
+    args = parser.parse_args()
+    if args.in_dataset == "CIFAR-10":
+        args.threshold = 1.5
+        args.p = 90
+
+    elif args.in_dataset == "CIFAR-100":
+        args.threshold = 1.5
+        args.p = 80
+
+    elif args.in_dataset == "imagenet":
+        args.threshold = 0.8
+        args.p = 70
+    main(args)

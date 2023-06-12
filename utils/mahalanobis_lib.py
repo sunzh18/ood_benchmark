@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 from scipy.spatial.distance import pdist, cdist, squareform
+from tqdm import tqdm
 
 def sample_estimator(model, num_classes, feature_list, train_loader):
     """
@@ -28,11 +29,11 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
             temp_list.append(0)
         list_features.append(temp_list)
 
-    for data, target in train_loader:
+    for data, target in tqdm(train_loader):
         total += data.size(0)
         # print(total)
-        if total > 50000:
-            break
+        # if total > 50000:
+        #     break
         # data = data.cuda()
         data = Variable(data)
         data = data.cuda()
@@ -72,6 +73,7 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
     for num_feature in feature_list:
         temp_list = torch.Tensor(num_classes, int(num_feature)).cuda()
         for j in range(num_classes):
+            # list_features[out_count][j] = list_features[out_count][j].clip(max=1.0)
             temp_list[j] = torch.mean(list_features[out_count][j], 0)
         sample_class_mean.append(temp_list)
         out_count += 1
