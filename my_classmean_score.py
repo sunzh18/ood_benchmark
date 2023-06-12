@@ -16,6 +16,7 @@ from utils.mahalanobis_lib import sample_estimator
 from utils.data_loader import get_dataloader_in, get_dataloader_out, cifar_out_datasets, imagenet_out_datasets
 from utils.model_loader import get_model
 
+from utils.my_cal_score import *
 from utils.cal_score import *
 from argparser import *
 
@@ -53,6 +54,14 @@ def get_features(args, model, dataloader, mask=None):
 
     return features
 
+def extact_mean_std(args, model):
+    for key, v in model.state_dict().items():
+        if key == 'fc.weight':
+            fc_w = v
+            print(v.shape)
+            # print(f'fc: {v}')
+        
+    return fc_w.cpu().numpy()
 
 def get_class_mean(args):
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
@@ -82,7 +91,31 @@ def get_class_mean(args):
     return mask, torch.tensor(class_mean)
     # train_acc = test_model(model, train_dataloader, mask)
     # print(f'tran_acc = {train_acc}')
-    
+
+def get_class_mean2(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
+    # class_mean = np.squeeze(class_mean)
+
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    p = 0
+    if args.p:
+        p = args.p
+    thresh = np.percentile(fc_w, p, axis=1)
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(fc_w[i] >= thresh[i],1,0)
+        class_mean[i,:] = class_mean[i,:] * mask[i,:]
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
 
 def test_model(model, data_loader, mask):
     num=0
@@ -157,533 +190,12 @@ def test_model_mask(model, data_loader, mask, p):
     return accu
 
 
-def iterate_data_my(data_loader, model, temper, mask):
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda()     
-                counter_cp = counter_cp + 1
-
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            
-            confs.extend(conf.data.cpu().numpy())
-    return np.array(confs)
-
-def iterate_data_my2(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            m1 = np.array(feature_prun.cpu().numpy() > 0)
-            m2 = np.array(feature_prun.cpu().numpy() == cp.cpu().numpy())
-            right = (m1 * m2).sum(axis=1)
-            count = np.sum(cp.cpu().numpy()>0,axis=1)
-            Right.extend(right)
-            Sum.extend(count)
-
-    return np.array(Right)
-
-def iterate_data_my3(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            m1 = np.array(feature_prun.cpu().numpy() > 0)
-            m2 = np.array(feature_prun.cpu().numpy() == cp.cpu().numpy())
-            right = (m1 * m2).sum(axis=1)
-            count = np.sum(cp.cpu().numpy()>0,axis=1)
-            scale = torch.tensor(right / count).float().cuda()
-            cp = cp * torch.exp(scale[:, None])
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my4(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            # s2 = feature_prun.sum(dim=1)
-
-            confs.extend(s1.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my5(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            # rate = s1/s2
-            rate = s2/(s2-s1)
-            # rate = torch.exp(rate)
-            confs.extend(rate.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my6(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            # s1 = cp.sum(dim=1)
-            # s2 = feature_prun.sum(dim=1)
-            s1 = cp.norm(p=1, dim=1)
-            s2 = feature_prun.norm(p=1, dim=1)
-            scale = s2/(s2-s1)
-            # scale = s1/s2
-            # cp = cp * torch.exp(scale[:, None])
-            # scale = scale + 1
-            cp = cp * scale[:, None]
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / (temper), dim=1))
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my7(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            # scale = s1/s2
-            scale = s2/(s2-s1)
-            feature_prun = feature_prun * scale[:, None]
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(feature_prun)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my8(data_loader, model, temper, mask, p):
-
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = feature.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            scale = s1/s2
-            confs.extend(scale.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my9(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            scale = s1/s2
-            # scale = s2/(s2-s1)
-            # cp = cp * scale[:, None]
-            cp = cp * torch.exp(scale[:, None])
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            scale2 = s1/s2
-            conf = conf * scale
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my10(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                feature_prun[counter_cp,:] = feature_prun[counter_cp,:] * mask[idx,:].cuda()
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            # scale = s1/s2
-            scale = s1/s2
-            feature_prun = feature_prun * scale[:, None]
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(feature_prun)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            # scale2 = s1/s2
-            # conf = conf * scale
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my11(data_loader, model, temper, mask, p):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_threshold_features(x, args.threshold)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            s1 = cp.sum(dim=1)
-            s2 = feature_prun.sum(dim=1)
-            scale = s1/s2
-            # scale = s2/(s2-s1)
-            # cp = cp * scale[:, None]
-            cp = cp * torch.exp(scale[:, None])
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            scale2 = s1/s2
-            # conf = conf * scale
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my12(data_loader, model, temper, mask, p, class_mean):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            class_mask = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                # feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda() 
-                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
-                counter_cp = counter_cp + 1
-
-            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
-            # conf = conf * scale
-            # cos_sim = torch.exp(cos_sim)
-            confs.extend(cos_sim.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_my13(data_loader, model, temper, mask, p, class_mean):
-    Right = []
-    Sum = []
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_threshold_features(x, args.threshold)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            cp = torch.zeros(feature.shape).cuda()
-            class_mask = torch.zeros(feature.shape).cuda()
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                # feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda() 
-                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
-                counter_cp = counter_cp + 1
-
-            cos_sim = F.cosine_similarity(cp, class_mask, dim=1)
-
-            # conf = conf * scale
-            cp = cp * torch.exp(cos_sim[:, None])
-            # cp = cp * scale[:, None]
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(cp)
-            conf = temper * (torch.logsumexp(logits / (temper), dim=1))
-            confs.extend(conf.data.cpu().numpy())
-           
-    return np.array(confs)
-
-def iterate_data_ashp(data_loader, model, temper, p):
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            
-            # scale = torch.tensor(right / count).float().cuda()
-            # cp = cp * torch.exp(scale[:, None])
-            # print(cp.type(), scale.type())
-            logits = model.forward_head(feature_prun)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
-def iterate_data_ashs(data_loader, model, temper, p):
-    confs = []
-    for b, (x, y) in enumerate(data_loader):
-        with torch.no_grad():
-            x = x.cuda()            
-            output = model(x)  
-    #         print(output.shape, output)
-            
-            pred_y = torch.max(output, 1)[1].cpu().numpy()
-
-            feature = model.forward_features(x)
-            s1 = feature.sum(dim=1)
-            np_feature = feature.cpu().numpy()
-            thresh = np.percentile(np_feature, p, axis=1)
-            counter_cp = 0
-            feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                counter_cp = counter_cp + 1
-
-            # print(feature_prun, cp, feature)
-            
-            #
-            # print(cp.type(), scale.type())
-            s2 = feature_prun.sum(dim=1)
-            scale = s1 / s2 - 1.0
-            feature_prun = feature_prun * torch.exp(scale[:, None])
-            logits = model.forward_head(feature_prun)
-            conf = temper * (torch.logsumexp(logits / temper, dim=1))
-            confs.extend(conf.data.cpu().numpy())
-
-    return np.array(confs)
-
 def test_mask(args):
-    args.num_classes = num_classes
+    
 
     loader_in_dict = get_dataloader_in(args, split=('val'))
     in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
-
+    args.num_classes = num_classes
     load_ckpt = False
     if args.model_path != None:
         load_ckpt = True
@@ -691,16 +203,17 @@ def test_mask(args):
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
 
-    mask, class_mean = get_class_mean(args)
-    # val_acc = test_model_mask(model, in_loader, mask)
-    # print(f'mask_val_acc = {val_acc}')
+    fc_w = extact_mean_std(args, model)
+    mask, class_mean = get_class_mean2(args, fc_w)
+    val_acc = test_model_mask(model, in_loader, mask, args.p)
+    print(f'mask_val_acc = {val_acc}')
     
-    # val_acc = test_model(model, in_loader, mask)
-    # print(f'orign_val_acc = {val_acc}')
+    val_acc = test_model(model, in_loader, mask)
+    print(f'orign_val_acc = {val_acc}')
     return 
 
 
-def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_dataset, mask, class_mean):
+def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_dataset, mask, class_mean, in_scores=None):
     # switch to evaluate mode
     model.eval()
 
@@ -709,8 +222,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
 
     if args.score == 'react':
         # args.threshold = 1.25
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
 
@@ -718,8 +232,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_ashp(in_loader, model, args.temperature_energy, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_ashp(in_loader, model, args.temperature_energy, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_ashp(out_loader, model, args.temperature_energy, p)
     
@@ -727,15 +242,17 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_ashs(in_loader, model, args.temperature_energy, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_ashs(in_loader, model, args.temperature_energy, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_ashs(out_loader, model, args.temperature_energy, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
     elif args.score == 'my_score':
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my(in_loader, model, args.temperature_energy, mask)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my(in_loader, model, args.temperature_energy, mask)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my(out_loader, model, args.temperature_energy, mask)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -743,16 +260,18 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my2(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my2(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my2(out_loader, model, args.temperature_energy, mask, p)
     elif args.score == 'my_score3':
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my3(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my3(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my3(out_loader, model, args.temperature_energy, mask, p)
 
@@ -761,8 +280,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my4(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my4(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my4(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -771,8 +291,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my5(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my5(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my5(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -781,8 +302,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my6(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my6(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my6(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -791,8 +313,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my7(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my7(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my7(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -801,8 +324,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my8(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my8(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my8(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -811,8 +335,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my9(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my9(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my9(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -821,8 +346,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my10(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my10(in_loader, model, args.temperature_energy, mask, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my10(out_loader, model, args.temperature_energy, mask, p)
         analysis_score(args, in_scores, out_scores, out_dataset)
@@ -831,50 +357,119 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my11(in_loader, model, args.temperature_energy, mask, p)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my11(in_loader, model, args.temperature_energy, mask, p, args.threshold)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_my11(out_loader, model, args.temperature_energy, mask, p)
+        out_scores = iterate_data_my11(out_loader, model, args.temperature_energy, mask, p, args.threshold)
         analysis_score(args, in_scores, out_scores, out_dataset)
     
     elif args.score == 'my_score12':
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my12(in_loader, model, args.temperature_energy, mask, p, class_mean)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my12(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_my12(out_loader, model, args.temperature_energy, mask, p, class_mean)
+        out_scores = iterate_data_my12(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
     elif args.score == 'my_score13':
         p = 0
         if args.p:
             p = args.p
-        logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_my13(in_loader, model, args.temperature_energy, mask, p, class_mean)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my13(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_my13(out_loader, model, args.temperature_energy, mask, p, class_mean)
+        out_scores = iterate_data_my13(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
     
+    elif args.score == 'my_score14':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my14(in_loader, model, args.temperature_energy, mask, p, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my14(out_loader, model, args.temperature_energy, mask, p, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score15':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my15(in_loader, model, args.temperature_energy, mask, p, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my15(out_loader, model, args.temperature_energy, mask, p, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score16':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my16(in_loader, model, args.temperature_energy, mask, p, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my16(out_loader, model, args.temperature_energy, mask, p, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score17':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my17(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my17(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score18':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my18(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my18(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'my_score19':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my19(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my19(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
-    # if args.in_dataset == "imagenet":
-    #     result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
-    #     fp = open(result_path,'a+')
-    #     result = []
+    if args.in_dataset == "imagenet":
+        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+        fp = open(result_path,'a+')
+        result = []
 
-    #     result.append(f'p: {args.p}')
-    #     result.append(out_dataset)
-    #     result.append("{:.4f}".format(auroc))
-    #     result.append("{:.4f}".format(aupr_in))
-    #     result.append("{:.4f}".format(aupr_out))
-    #     result.append("{:.4f}".format(fpr95))
-    #     context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-    #     context.writerow(result)
-    #     fp.close()
+        result.append(f'p: {args.p}')
+        result.append(out_dataset)
+        result.append("{:.4f}".format(auroc))
+        result.append("{:.4f}".format(aupr_in))
+        result.append("{:.4f}".format(aupr_out))
+        result.append("{:.4f}".format(fpr95))
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
 
     logger.info('============Results for {}============'.format(args.score))
     logger.info('=======in dataset: {}; ood dataset: {}============'.format(args.in_dataset, out_dataset))
@@ -884,7 +479,7 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
     logger.info('FPR95: {}'.format(fpr95))
 
     logger.flush()
-    return auroc, aupr_in, aupr_out, fpr95
+    return auroc, aupr_in, aupr_out, fpr95, in_scores
 
 
 def analysis_act_num(model, data_loader, args, mask):
@@ -1496,15 +1091,20 @@ def main(args):
     loader_in_dict = get_dataloader_in(args, split=('val'))
     in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
     args.num_classes = num_classes
+    in_scores=None
 
     load_ckpt = False
     if args.model_path != None:
         load_ckpt = True
 
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    mask, class_mean = get_class_mean(args)
     model.eval()
 
+    fc_w = extact_mean_std(args, model)
+    mask, class_mean = get_class_mean2(args, fc_w)
+    # mask, class_mean = get_class_mean(args)
+    class_mean = class_mean.cuda()
+    class_mean = class_mean.clip(max=args.threshold)
     if args.out_dataset is not None:
         out_dataset = args.out_dataset
         loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
@@ -1514,9 +1114,9 @@ def main(args):
         logger.info(f"Using an in-distribution set with {len(in_set)} images.")
         logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
 
-
         start_time = time.time()
-        run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean)
+        run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+        print(in_scores)
         end_time = time.time()
 
         logger.info("Total running time: {}".format(end_time - start_time))
@@ -1536,10 +1136,10 @@ def main(args):
             logger.info(f"Using an in-distribution set with {len(in_set)} images.")
             logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
 
-            start_time = time.time()
-            auroc, aupr_in, aupr_out, fpr95 = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean)
-            end_time = time.time()
 
+            start_time = time.time()
+            auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+            end_time = time.time()
             logger.info("Total running time: {}".format(end_time - start_time))
 
             AUroc.append(auroc)
@@ -1661,11 +1261,11 @@ if __name__ == "__main__":
         args.threshold = 1.5
 
     elif args.in_dataset == "imagenet":
-        args.threshold = 0.8
+        args.threshold = 1.0
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)
     # analysis_cos(args)
     main(args)
     # test_train(args)
-    
+    # test_mask(args)

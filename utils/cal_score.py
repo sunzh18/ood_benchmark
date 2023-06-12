@@ -295,3 +295,69 @@ def bats_iterate_data_gradnorm(data_loader, model, temperature, num_classes, lam
         confs.append(layer_grad_norm)
 
     return np.array(confs)
+
+
+
+def iterate_data_ashp(data_loader, model, temper, p):
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            
+            # scale = torch.tensor(right / count).float().cuda()
+            # cp = cp * torch.exp(scale[:, None])
+            # print(cp.type(), scale.type())
+            logits = model.forward_head(feature_prun)
+            conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_ashs(data_loader, model, temper, p):
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+            
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_features(x)
+            s1 = feature.sum(dim=1)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            feature_prun = torch.zeros(feature.shape).cuda()
+            for idx in pred_y:
+                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+                counter_cp = counter_cp + 1
+
+            # print(feature_prun, cp, feature)
+            
+            #
+            # print(cp.type(), scale.type())
+            s2 = feature_prun.sum(dim=1)
+            scale = s1 / s2 - 1.0
+            feature_prun = feature_prun * torch.exp(scale[:, None])
+            logits = model.forward_head(feature_prun)
+            conf = temper * (torch.logsumexp(logits / temper, dim=1))
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+

@@ -37,7 +37,6 @@ def get_model(args, num_classes, load_ckpt=True, info=None, LU=False):
             model = DenseNet3(100, num_classes, 12, reduction=0.5, bottleneck=True, dropRate=0.0, normalizer=None, p=args.p, p_w=args.p_w, p_a=args.p_a, info=info, LU = LU, clip_threshold = args.threshold)
         else:
             assert False, 'Not supported model arch: {}'.format(args.model)
-
     device = torch.device("cuda") 
     if train_on_gpu:                                                   #部署到GPU上
         device = torch.device("cuda") 

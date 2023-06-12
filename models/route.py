@@ -80,15 +80,3 @@ class RouteLUNCH(nn.Linear):
         for idx in preds:
             cp[counter_cp,:] = input[counter_cp,:] * self.mask_f[idx,:].cuda()     
             counter_cp = counter_cp + 1
-
-        vote = torch.zeros((len(preds),self.out_features,self.in_features)).cuda()
-        counter_dice = 0
-        for idx in preds:
-            vote[counter_dice,:,:] = cp[counter_dice,:] * self.masked_w[idx,:,:].cuda()
-            counter_dice = counter_dice + 1
-        
-        if self.bias is not None:
-            out = vote.sum(2) + self.bias
-        else:
-            out = vote.sum(2)    
-        return out

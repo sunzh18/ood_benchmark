@@ -211,6 +211,8 @@ class AbstractResNet(nn.Module):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.pruned_activations_mask = []
 
+        self.masked_w = None
+
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
@@ -401,6 +403,17 @@ class ResNet(AbstractResNet):
     
     def forward_head(self, feat):
         out = self.fc(feat)
+        return out
+
+    def forward_head_mask(self, feat, mask=None):
+        # print(self.fc.weight.shape)
+        if self.masked_w is None:
+            self.masked_w = self.fc.weight * mask
+        vote = feat[:, None, :] * self.masked_w
+        if self.fc.bias is not None:
+            out = vote.sum(2) + self.fc.bias
+        else:
+            out = vote.sum(2)
         return out
 
     def forward_threshold_features(self, x, threshold=1e10):

@@ -170,6 +170,8 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
             elif args.in_dataset in {'CIFAR-10', 'CIFAR-100'}:
                 valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/places365_standard/val",
                                                         transform=val_transform)
+                l = len(valset)
+                valset, _ = torch.utils.data.random_split(valset, [10000, l-10000])
             
             
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
