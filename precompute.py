@@ -147,8 +147,7 @@ def get_LINE_info(args, model, num_classes, trainset, featdim):
                 score_log[start_ind] = outputs.data.cpu().numpy()
         
             np.save(cache_name, (shap_log.T, score_log.T, label_log))
-            print("dataset : ", args.dataset)
-            print("method : ", args.method)
+            print("dataset : ", args.in_dataset)
             print("iteration done")
         else:
             shap_log, score_log, label_log = np.load(cache_name, allow_pickle=True)
@@ -162,8 +161,7 @@ def get_LINE_info(args, model, num_classes, trainset, featdim):
                 shap_matrix_mean[:,class_num] = masked_shap.sum(0) / mask.sum()
                  
             np.save(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy", shap_matrix_mean)
-            print("dataset : ", args.dataset)
-            print("method : ", args.method)
+            print("dataset : ", args.in_dataset)
             print("precompute done")
     else:
     ############################################################################################################

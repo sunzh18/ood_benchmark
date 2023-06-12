@@ -162,6 +162,8 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
         
         elif val_dataset == 'Places':   # imagenet, cifar
             val_transform = config.transform_test_largescale if args.in_dataset in {'imagenet'} else config.transform_test
+            valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/OOD_FOR_ImageNet1K/Places",
+                                                        transform=val_transform)
             if args.in_dataset == 'imagenet':
                 valset = torchvision.datasets.ImageFolder("/data15/data15_5/Public/Datasets/OOD_FOR_ImageNet1K/Places",
                                                         transform=val_transform)
