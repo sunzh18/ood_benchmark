@@ -447,9 +447,10 @@ def iterate_data_my12(data_loader, model, temper, mask, p, threshold, class_mean
                 counter_cp = counter_cp + 1
 
             cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+            rate = cos_sim
             # conf = conf * scale
             # cos_sim = torch.exp(cos_sim)
-            confs.extend(cos_sim.data.cpu().numpy())
+            confs.extend(rate.data.cpu().numpy())
 
     return np.array(confs)
 
@@ -610,13 +611,15 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
             cp = torch.zeros(feature.shape).cuda()
             class_mask = torch.zeros(feature.shape).cuda()
             feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
-                counter_cp = counter_cp + 1
+            # for idx in pred_y:
+            #     cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+            #     feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+            #     # class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
+            #     counter_cp = counter_cp + 1
 
             # print(feature_prun, cp, feature)
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
             L = mask.sum(dim=1)[0]
             cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
             s1 = cp.sum(dim=1)
@@ -630,18 +633,19 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
             # cp = cp * torch.exp(scale[:, None])
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
             l2_dis = 1 / torch.pairwise_distance(class_mask, cp)
             counter_cp = 0
-
-            for idx in pred_y:
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale[counter_cp])
-                logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp]/10)
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(l2_dis[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(act_rate[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale2[counter_cp])
-                counter_cp = counter_cp + 1
-
+            
+            # for idx in pred_y:
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale[counter_cp])
+            #     logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp]/10)
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(l2_dis[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(act_rate[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale2[counter_cp])
+            #     counter_cp = counter_cp + 1
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
             conf = conf * cos_sim
             confs.extend(conf.data.cpu().numpy())
@@ -716,3 +720,160 @@ def iterate_data_my19(data_loader, model, temper, mask, p, threshold, class_mean
 
     return np.array(confs)
 
+def iterate_data_my20(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, threshold)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            L = mask.sum(dim=1)[0]
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+            logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_myodin(data_loader, model, epsilon, temper, mask, p, threshold, class_mean):
+    criterion = torch.nn.CrossEntropyLoss().cuda()
+    confs = []
+    temper = 800
+    for b, (x, y) in enumerate(data_loader):
+        x = Variable(x.cuda(), requires_grad=True)    
+        output = model(x)  
+        pred_y = torch.max(output, 1)[1].cpu().numpy()  
+
+        feature = model.forward_threshold_features(x, threshold)
+        cp = torch.zeros(feature.shape).cuda()
+        class_mask = torch.zeros(feature.shape).cuda()
+
+        cp = feature * mask[pred_y,:].cuda()
+        class_mask = class_mean[pred_y,:].cuda() 
+        cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+        outputs = model.forward_head(cp)
+
+        maxIndexTemp = np.argmax(outputs.data.cpu().numpy(), axis=1)
+
+        outputs = (outputs * cos_sim[:, None]) / temper
+
+        labels = Variable(torch.LongTensor(maxIndexTemp).cuda())
+        loss = criterion(outputs, labels)
+        loss.backward(retain_graph=True)
+
+        # Normalizing the gradient to binary in {0, 1}
+        gradient = torch.ge(x.grad.data, 0)
+        gradient = (gradient.float() - 0.5) * 2
+
+        # Adding small perturbations to images
+        tempInputs = torch.add(x.data, -epsilon, gradient)
+                
+
+        feature =  model.forward_threshold_features(tempInputs, threshold)
+   
+        cp = feature * mask[maxIndexTemp,:].cuda()
+        class_mask = class_mean[maxIndexTemp,:].cuda() 
+        cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+        outputs = model.forward_head(cp)
+        outputs = outputs * cos_sim[:, None]
+        outputs = outputs / temper
+        # Calculating the confidence after adding perturbations
+        nnOutputs = outputs.data.cpu()
+        nnOutputs = nnOutputs.numpy()
+        nnOutputs = nnOutputs - np.max(nnOutputs, axis=1, keepdims=True)
+        nnOutputs = np.exp(nnOutputs) / np.sum(np.exp(nnOutputs), axis=1, keepdims=True)
+
+        confs.extend(np.max(nnOutputs, axis=1))
+
+    return np.array(confs)
+
+def iterate_data_mymsp(data_loader, model, mask, p, threshold, class_mean):
+    m = torch.nn.Softmax(dim=-1).cuda()
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, threshold)
+
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+            logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
+            logits = logits * cos_sim[:, None]
+            conf, _ = torch.max(m(logits), dim=-1)
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_simodin(data_loader, model, epsilon, temper, mask, p, threshold, class_mean):
+    confs = []
+    criterion = torch.nn.CrossEntropyLoss().cuda()
+    temper = 800
+    for b, (x, y) in enumerate(data_loader):
+        x = Variable(x.cuda(), requires_grad=True)      
+        feature = model.forward_threshold_features(x, threshold)
+        outputs = model.forward_head(feature)
+
+        maxIndexTemp = np.argmax(outputs.data.cpu().numpy(), axis=1)
+
+        outputs = outputs / temper
+
+        labels = Variable(torch.LongTensor(maxIndexTemp).cuda())
+        loss = criterion(outputs, labels)
+        loss.backward(retain_graph=True)
+
+        # Normalizing the gradient to binary in {0, 1}
+        gradient = torch.ge(x.grad.data, 0)
+        gradient = (gradient.float() - 0.5) * 2
+
+        # Adding small perturbations to images
+        tempInputs = torch.add(x.data, -epsilon, gradient)
+                
+
+        feature =  model.forward_threshold_features(tempInputs, threshold)
+        outputs = model.forward_head(feature)
+        class_mask = torch.zeros(feature.shape).cuda()
+
+        class_mask = class_mean[maxIndexTemp,:].cuda() 
+        cos_sim = F.cosine_similarity(class_mask, feature, dim=1)
+        outputs = outputs * cos_sim[:, None]
+        outputs = outputs / temper
+        # Calculating the confidence after adding perturbations
+        nnOutputs = outputs.data.cpu()
+        nnOutputs = nnOutputs.numpy()
+        nnOutputs = nnOutputs - np.max(nnOutputs, axis=1, keepdims=True)
+        nnOutputs = np.exp(nnOutputs) / np.sum(np.exp(nnOutputs), axis=1, keepdims=True)
+
+        confs.extend(np.max(nnOutputs, axis=1))
+
+    return np.array(confs)

@@ -452,24 +452,68 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_my19(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
+    elif args.score == 'my_score20':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my20(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my20(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'myodin':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_myodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_myodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'mymsp':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_mymsp(in_loader, model, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_mymsp(out_loader, model, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    elif args.score == 'simodin':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_simodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_simodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
-    if args.in_dataset == "imagenet":
-        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
-        fp = open(result_path,'a+')
-        result = []
+    # if args.in_dataset == "imagenet":
+    #     result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    #     fp = open(result_path,'a+')
+    #     result = []
 
-        result.append(f'p: {args.p}')
-        result.append(out_dataset)
-        result.append("{:.4f}".format(auroc))
-        result.append("{:.4f}".format(aupr_in))
-        result.append("{:.4f}".format(aupr_out))
-        result.append("{:.4f}".format(fpr95))
-        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-        context.writerow(result)
-        fp.close()
+    #     result.append(f'p: {args.p}')
+    #     result.append(out_dataset)
+    #     result.append("{:.4f}".format(auroc))
+    #     result.append("{:.4f}".format(aupr_in))
+    #     result.append("{:.4f}".format(aupr_out))
+    #     result.append("{:.4f}".format(fpr95))
+    #     context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+    #     context.writerow(result)
+    #     fp.close()
 
     logger.info('============Results for {}============'.format(args.score))
     logger.info('=======in dataset: {}; ood dataset: {}============'.format(args.in_dataset, out_dataset))
@@ -1262,6 +1306,7 @@ if __name__ == "__main__":
 
     elif args.in_dataset == "imagenet":
         args.threshold = 1.0
+    args.threshold = 1e5
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)
