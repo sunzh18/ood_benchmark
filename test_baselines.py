@@ -72,9 +72,9 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
         model.eval()
         logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
+        in_scores = iterate_data_DICE(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
+        out_scores = iterate_data_DICE(out_loader, model, args.temperature_energy, args.threshold)
 
     elif args.score == 'GradNorm':
         logger.info("Processing in-distribution data...")

@@ -485,6 +485,27 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_mymsp(out_loader, model, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
+    elif args.score == 'myLINE':
+       
+        args.threshold = 1.0  #0.8
+        p = 0
+        args.p = 0
+
+        info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
+        model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
+        model.eval()
+        fc_w = extact_mean_std(args, model)
+        mask, class_mean = get_class_mean2(args, fc_w)
+        # mask, class_mean = get_class_mean(args)
+        class_mean = class_mean.cuda()
+        class_mean = class_mean.clip(max=args.threshold)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_myLINE(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_myLINE(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
     elif args.score == 'simodin':
         p = 0
         if args.p:
@@ -1300,13 +1321,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.in_dataset == "CIFAR-10":
         args.threshold = 1.5
+        args.p_a = 90
+        args.p_w = 90
 
     elif args.in_dataset == "CIFAR-100":
+        args.p_a = 10
+        args.p_w = 90
         args.threshold = 1.5
 
     elif args.in_dataset == "imagenet":
         args.threshold = 1.0
-    args.threshold = 1e5
+        args.p_a = 10
+        args.p_w = 10
+    # args.threshold = 1e5
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)

@@ -349,6 +349,13 @@ class ResNetCifar(AbstractResNet):
         out = self.fc(feat)
         return out
 
+    def forward_DICE(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.avgpool(feat)
+        feat = feat.clip(max=threshold)
+        feat = feat.view(feat.size(0), -1)
+        out, feat = self.fc(feat)
+        return out, feat
     
     def forward_threshold(self, x, threshold=1e10):
         x = self.features(x)

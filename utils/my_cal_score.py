@@ -877,3 +877,32 @@ def iterate_data_simodin(data_loader, model, epsilon, temper, mask, p, threshold
         confs.extend(np.max(nnOutputs, axis=1))
 
     return np.array(confs)
+
+def iterate_data_myLINE(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            # compute output, measure accuracy and record loss.
+            logits, feature = model.forward_DICE(x, threshold)
+            pred_y = torch.max(logits, 1)[1].cpu().numpy()
+            mask = model.fc.mask_f
+
+            class_mask = torch.zeros(feature.shape).cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            counter_cp = 0
+            for idx in pred_y:
+                class_mask[counter_cp,:] = class_mask[counter_cp,:] * mask[idx,:].cuda()     
+                counter_cp = counter_cp + 1
+            cos_sim = F.cosine_similarity(class_mask, feature, dim=1)
+
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)

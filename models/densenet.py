@@ -264,6 +264,14 @@ class DenseNet3(nn.Module):
         out = out.view(-1, self.in_planes)
         return self.fc(out), penultimate
     
+    def forward_DICE(self, x, threshold=1e10):
+        out = self.features(x)
+        out = F.avg_pool2d(out, 8)
+        out = out.clip(max=threshold)
+        out = out.view(-1, self.in_planes)
+        out, feat = self.fc(out)
+        return out, feat
+
     def _forward(self, x):
         self.activations = []
         self.gradients = []
