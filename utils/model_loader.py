@@ -25,7 +25,7 @@ def get_model(args, num_classes, load_ckpt=True, info=None, LU=False):
             checkpoint = torch.load("/data/Public/PretrainedModels/resnet50-19c8e357.pth")
 
         elif args.model == 'mobilenet':
-            model = mobilenet_v2(num_classes=num_classes, pretrained=False)
+            model = mobilenet_v2(num_classes=num_classes, pretrained=False, p=args.p, p_w=args.p_w, p_a=args.p_a, info=info, LU = LU, clip_threshold = args.threshold)
             checkpoint = torch.load("/data/Public/PretrainedModels/mobilenet_v2-b0353104.pth")
 
         elif args.model == 'vit':
