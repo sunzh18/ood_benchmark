@@ -88,6 +88,17 @@ def iterate_data_react(data_loader, model, temper, threshold):
             confs.extend(conf.data.cpu().numpy())
     return np.array(confs)
 
+def iterate_data_LINE(data_loader, model, temper, threshold):
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()
+            # compute output, measure accuracy and record loss.
+            logits, _ = model.forward_LINE(x, threshold)
+
+            conf = temper * torch.logsumexp(logits / temper, dim=1)
+            confs.extend(conf.data.cpu().numpy())
+    return np.array(confs)
 
 def iterate_data_gradnorm(data_loader, model, temperature, num_classes):
     confs = []
@@ -361,3 +372,31 @@ def iterate_data_ashs(data_loader, model, temper, p):
 
     return np.array(confs)
 
+def iterate_data_SHE(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, threshold)
+            np_feature = feature.cpu().numpy()
+            thresh = np.percentile(np_feature, p, axis=1)
+            counter_cp = 0
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+
+            conf = torch.sum(torch.mul(class_mask,cp),dim=1)
+            # conf = conf * scale
+            # cos_sim = torch.exp(cos_sim)
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)

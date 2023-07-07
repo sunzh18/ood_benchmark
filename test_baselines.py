@@ -65,16 +65,16 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
     elif args.score == 'LINE':
-        args.p_a = 90
-        args.p_w = 90
-        args.threshold = 1.0  #0.8
+        args.p_a = 10
+        args.p_w = 10
+        args.threshold = 0.8  #0.8
         info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
         model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
         model.eval()
         logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
+        in_scores = iterate_data_LINE(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
+        out_scores = iterate_data_LINE(out_loader, model, args.temperature_energy, args.threshold)
 
     elif args.score == 'GradNorm':
         logger.info("Processing in-distribution data...")

@@ -486,7 +486,7 @@ def iterate_data_my13(data_loader, model, temper, mask, p, threshold, class_mean
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
             conf = temper * (torch.logsumexp(logits / (temper), dim=1))
-            conf = conf * cos_sim
+            # conf = conf * cos_sim
             confs.extend(conf.data.cpu().numpy())
            
     return np.array(confs)
@@ -602,6 +602,7 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
     #         print(output.shape, output)
 
             pred_y = torch.max(output, 1)[1].cpu().numpy()
+            # pred_y = torch.max(output, 1)[1].cpu().tolist()
 
             feature = model.forward_threshold_features(x, threshold)
             np_feature = feature.cpu().numpy()
@@ -610,13 +611,15 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
             cp = torch.zeros(feature.shape).cuda()
             class_mask = torch.zeros(feature.shape).cuda()
             feature_prun = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
-                class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
-                counter_cp = counter_cp + 1
+            # for idx in pred_y:
+            #     cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+            #     feature_prun[counter_cp] = torch.tensor(np.where(np_feature[counter_cp] >= thresh[counter_cp],np_feature[counter_cp],0)).cuda()
+            #     # class_mask[counter_cp,:] = class_mean[idx,:].cuda() 
+            #     counter_cp = counter_cp + 1
 
             # print(feature_prun, cp, feature)
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
             L = mask.sum(dim=1)[0]
             cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
             s1 = cp.sum(dim=1)
@@ -630,17 +633,18 @@ def iterate_data_my17(data_loader, model, temper, mask, p, threshold, class_mean
             # cp = cp * torch.exp(scale[:, None])
             # print(cp.type(), scale.type())
             logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
             l2_dis = 1 / torch.pairwise_distance(class_mask, cp)
             counter_cp = 0
 
-            for idx in pred_y:
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale[counter_cp])
-                logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp]/10)
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(l2_dis[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(act_rate[counter_cp])
-                # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale2[counter_cp])
-                counter_cp = counter_cp + 1
+            # for idx in pred_y:
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale[counter_cp])
+            #     logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(cos_sim[counter_cp]/10)
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(l2_dis[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(act_rate[counter_cp])
+            #     # logits[counter_cp, idx] = logits[counter_cp, idx] * torch.exp(scale2[counter_cp])
+            #     counter_cp = counter_cp + 1
 
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
             conf = conf * cos_sim
@@ -705,14 +709,46 @@ def iterate_data_my19(data_loader, model, temper, mask, p, threshold, class_mean
             cp = torch.zeros(feature.shape).cuda()
             feature_prun = torch.zeros(feature.shape).cuda()
             class_mask = torch.zeros(feature.shape).cuda()
-            for idx in pred_y:
-                cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
-                counter_cp = counter_cp + 1
+            # for idx in pred_y:
+            #     cp[counter_cp,:] = feature[counter_cp,:] * mask[idx,:].cuda() 
+            #     counter_cp = counter_cp + 1
 
-            logits = cp @ class_mean.t() / (cp.norm(2,1) * class_mean.norm(2,1))
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            logits = cp @ class_mask.t()        #(cp.norm(2,1) * class_mask.norm(2,1))
             
             conf = temper * (torch.logsumexp(logits / temper, dim=1))
             confs.extend(conf.cpu().numpy())
 
     return np.array(confs)
 
+def iterate_data_my20(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, threshold)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            L = mask.sum(dim=1)[0]
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+            logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)

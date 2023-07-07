@@ -214,6 +214,18 @@ class MobileNetV2(nn.Module):
     def forward(self, x, threshold=1e6):
         return self._forward_impl(x, threshold=threshold)
 
+    def forward_LINE(self, x, threshold=1e10):
+        # This exists since TorchScript doesn't support inheritance, so the superclass method
+        # (this one) needs to have a name other than `forward` that can be accessed in a subclass
+        x = self.features(x)
+        # Cannot use "squeeze" as batch-size can be 1 => must use reshape with x.shape[0]
+        x = self.avgpool(x)
+        x = x.reshape(x.shape[0], -1)
+        x = x.clip(max=threshold)
+
+        out, feat = self.classifier(x)
+        return out, feat
+
     def forward_threshold(self, x, threshold=1e10):
         return self._forward_impl(x, threshold=threshold)
 
@@ -346,7 +358,7 @@ class MobileNetV2(nn.Module):
         
         i = 0
         for module in self.modules():
-            if isinstance(module, nn.AvgPool2d):
+            if isinstance(module, nn.AdaptiveAvgPool2d):
             # if isinstance(module, nn.ReLU):
             # if isinstance(module, resnet.BasicBlock):
                 self.handles_list.append(module.register_forward_hook(forward_hook_relu))

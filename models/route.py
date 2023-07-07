@@ -43,6 +43,7 @@ class RouteLUNCH(nn.Linear):
 
     def __init__(self, in_features, out_features, bias=True, p_w=10, p_a=10, conv1x1=False, info=None, clip_threshold = 1e10):
         super(RouteLUNCH, self).__init__(in_features, out_features, bias)
+        print('use LINE')
         self.p = p_a
         self.weight_p = p_w
         self.clip_threshold = clip_threshold
@@ -80,3 +81,15 @@ class RouteLUNCH(nn.Linear):
         for idx in preds:
             cp[counter_cp,:] = input[counter_cp,:] * self.mask_f[idx,:].cuda()     
             counter_cp = counter_cp + 1
+
+        vote = torch.zeros((len(preds),self.out_features,self.in_features)).cuda()
+        counter_dice = 0
+        for idx in preds:
+            vote[counter_dice,:,:] = cp[counter_dice,:] * self.masked_w[idx,:,:].cuda()
+            counter_dice = counter_dice + 1
+        
+        if self.bias is not None:
+            out = vote.sum(2) + self.bias
+        else:
+            out = vote.sum(2)    
+        return out, cp

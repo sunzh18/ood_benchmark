@@ -66,8 +66,8 @@ def extact_mean_std(args, model):
         # print(f'{key}')
         if key == 'fc.weight':
             fc_w = v
-            print(v.shape)
-            print(f'fc: {v}')
+            # print(v.shape)
+            # print(f'fc: {v}')
         
         #wideresnet, densenet
         if key == 'bn1.weight':
@@ -326,9 +326,9 @@ def main(args):
 
     # get_class_mean(args, fc_w)
 
-    # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
-    # if not os.path.isdir(file_folder):
-    #     os.makedirs(file_folder)
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    if not os.path.isdir(file_folder):
+        os.makedirs(file_folder)
     
     # features = get_features(args, model, train_dataloader)
     # print(features.shape[-1])
@@ -352,19 +352,19 @@ def main(args):
     # print(info)
 
 
-    get_class_mean_precision(args, model, num_classes, train_dataloader)
+    # get_class_mean_precision(args, model, num_classes, train_dataloader)
 
-    # if args.model == 'resnet18':
-    #     featdim = 512
-    # elif args.model == 'resnet50':
-    #     featdim = 2048
+    if args.model == 'resnet18':
+        featdim = 512
+    elif args.model == 'resnet50':
+        featdim = 2048
     # elif args.model == 'wrn':
     #     featdim = 2048
-    # elif args.model == 'mobilenet':
-    #     featdim = 2048
+    elif args.model == 'mobilenet':
+        featdim = 1280
     # elif args.model == 'densenet':
     #     featdim = 342
-    # get_LINE_info(args, model, num_classes, trainset, featdim)
+    get_LINE_info(args, model, num_classes, trainset, featdim)
     
 
 
