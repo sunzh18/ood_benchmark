@@ -55,6 +55,7 @@ def get_features(args, model, dataloader):
 
 
 def extact_mean_std(args, model):
+    
     for key, v in model.state_dict().items():
         # resnet
         if key == 'layer4.1.bn2.weight':
@@ -63,12 +64,19 @@ def extact_mean_std(args, model):
         if key == 'layer4.1.bn2.bias':
             # print(f'mean: {v}')
             mean = v
+        
+        if key == 'layer4.2.bn3.weight':
+            # print(f'var: {v}')
+            std = v
+        if key == 'layer4.2.bn3.bias':
+            # print(f'mean: {v}')
+            mean = v
 
-        # print(f'{key}')
+        print(f'{key}')
         if key == 'fc.weight':
             fc_w = v
-            print(v.shape)
-            print(f'fc: {v}')
+            # print(v.shape)
+            # print(f'fc: {v}')
         
         #wideresnet, densenet
         if key == 'bn1.weight':
@@ -78,13 +86,13 @@ def extact_mean_std(args, model):
             # print(f'mean: {v}')
             mean = v
 
-    # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
-    # if not os.path.isdir(file_folder):
-    #     os.makedirs(file_folder)
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    if not os.path.isdir(file_folder):
+        os.makedirs(file_folder)
     
-    # torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
-    # torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
-    # print(mean)
+    torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
+    torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
+    # print(mean.shape)
     # print(std)
     return fc_w.cpu().numpy()
 

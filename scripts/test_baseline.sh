@@ -2,9 +2,8 @@
 in_dataset=$1
 model=$2
 SCORE=$3
-OUT_DATA=$4
+GPU=$4
 ood_data="/data15/data15_5/Public/Datasets"
-GPU=0
 out_dataset="SUN"
 # model_path="checkpoints/network/resnet18_cifar10.pth"
 model_path="checkpoints/network"
@@ -19,6 +18,6 @@ CUDA_VISIBLE_DEVICES=${GPU} python test_baselines.py \
 --logdir result \
 --score ${SCORE} \
 --model_path ${model_path} \
---p 90
+--p 70
 # --arch ${arch}
 # --out_dataset ${out_dataset} \

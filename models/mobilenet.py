@@ -164,6 +164,13 @@ class MobileNetV2(nn.Module):
         out = self.classifier(feat)
         return out
 
+    def forward_threshold_features(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.avgpool(feat)
+        feat = feat.clip(max=threshold)
+        feat = feat.reshape(feat.shape[0], -1)  
+        return feat
+
     def forward_features(self, x):
         feat = self.features(x)
         feat = self.avgpool(feat)

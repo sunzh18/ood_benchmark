@@ -416,7 +416,7 @@ class ResNet(AbstractResNet):
             out = vote.sum(2)
         return out
 
-    def forward_DICE(self, x, threshold=1e10):
+    def forward_LINE(self, x, threshold=1e10):
         feat = self.features(x)
         feat = self.avgpool(feat)
         feat = feat.clip(max=threshold)

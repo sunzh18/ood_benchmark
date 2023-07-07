@@ -72,9 +72,36 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
         model.eval()
         logger.info("Processing in-distribution data...")
-        in_scores = iterate_data_DICE(in_loader, model, args.temperature_energy, args.threshold)
+        in_scores = iterate_data_LINE(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_DICE(out_loader, model, args.temperature_energy, args.threshold)
+        out_scores = iterate_data_LINE(out_loader, model, args.temperature_energy, args.threshold)
+
+    elif args.score == 'bats':
+        bats = 1
+        feature_std=torch.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_features_std.pt").cuda()
+        feature_mean=torch.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_features_mean.pt").cuda()
+        if args.in_dataset == 'imagenet':       
+            lam = 1.25
+
+        elif args.in_dataset == 'CIFAR-10':
+            if args.model == 'wrn':
+                lam = 2.25
+            elif args.model == 'resnet18':
+                lam = 3.3
+            lam = 0.8
+
+        elif args.in_dataset == 'CIFAR-100':
+            if args.model == 'wrn':
+                lam = 1.5
+            elif args.model == 'resnet18':
+                lam = 1.35
+            lam = 0.8
+        # print(feature_std.shape)
+        args.bats = lam
+        logger.info("Processing in-distribution data...")
+        in_scores = bats_iterate_data_energy(in_loader, model, args.temperature_energy, lam, feature_std, feature_mean, bats)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = bats_iterate_data_energy(out_loader, model, args.temperature_energy, lam, feature_std, feature_mean, bats)
 
     elif args.score == 'GradNorm':
         logger.info("Processing in-distribution data...")
@@ -293,7 +320,7 @@ def main(args):
             result.append(f'{args.name}/{args.in_dataset}/{args.model}_{args.arch}')
         else:
             # result.append(f'{args.name}/{args.in_dataset}/{args.model}')
-            result.append(f'threshold{args.threshold}/p{args.p}/bat{args.bats}')
+            result.append(f'threshold{args.threshold}/p{args.p}/lam{args.bats}')
         result.append('Average')
         result.append("{:.4f}".format(avg_auroc))
         result.append("{:.4f}".format(avg_aupr_in))

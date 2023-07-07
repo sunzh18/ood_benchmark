@@ -15,6 +15,7 @@ from torch.autograd import Variable
 from utils.mahalanobis_lib import sample_estimator
 from utils.data_loader import get_dataloader_in, get_dataloader_out, cifar_out_datasets, imagenet_out_datasets
 from utils.model_loader import get_model
+# from compute_gradcam import *
 
 from utils.cal_score import *
 from argparser import *
@@ -727,19 +728,21 @@ def iterate_data_my20(data_loader, model, temper, mask, p, threshold, class_mean
     for b, (x, y) in enumerate(data_loader):
         with torch.no_grad():
             x = x.cuda()            
-            output = model(x)  
+            output = model.forward_threshold(x, threshold)
     #         print(output.shape, output)
 
             pred_y = torch.max(output, 1)[1].cpu().numpy()
 
-            feature = model.forward_threshold_features(x, threshold)
+            # feature = model.forward_threshold_features(x, threshold)
+            feature = model.forward_features(x)
             cp = torch.zeros(feature.shape).cuda()
             class_mask = torch.zeros(feature.shape).cuda()
             cp = feature * mask[pred_y,:].cuda()
             class_mask = class_mean[pred_y,:].cuda() 
-            L = mask.sum(dim=1)[0]
+
             cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
 
+            cp = cp.clip(max=threshold)
             logits = model.forward_head(cp)
             # logits = logits * torch.exp(cos_sim[:, None])
             logits = logits * cos_sim[:, None]
@@ -757,7 +760,7 @@ def iterate_data_myodin(data_loader, model, epsilon, temper, mask, p, threshold,
     temper = 800
     for b, (x, y) in enumerate(data_loader):
         x = Variable(x.cuda(), requires_grad=True)    
-        output = model(x)  
+        output = model.forward_threshold(x, threshold) 
         pred_y = torch.max(output, 1)[1].cpu().numpy()  
 
         feature = model.forward_threshold_features(x, threshold)
@@ -786,12 +789,12 @@ def iterate_data_myodin(data_loader, model, epsilon, temper, mask, p, threshold,
         tempInputs = torch.add(x.data, -epsilon, gradient)
                 
 
-        feature =  model.forward_threshold_features(tempInputs, threshold)
-   
+        # feature =  model.forward_threshold_features(tempInputs, threshold)
+        feature = model.forward_features(tempInputs)
         cp = feature * mask[maxIndexTemp,:].cuda()
         class_mask = class_mean[maxIndexTemp,:].cuda() 
         cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
-
+        cp = cp.clip(max=threshold)
         outputs = model.forward_head(cp)
         outputs = outputs * cos_sim[:, None]
         outputs = outputs / temper
@@ -811,12 +814,12 @@ def iterate_data_mymsp(data_loader, model, mask, p, threshold, class_mean):
     for b, (x, y) in enumerate(data_loader):
         with torch.no_grad():
             x = x.cuda()            
-            output = model(x)  
+            output = model.forward_threshold(x, threshold) 
     #         print(output.shape, output)
 
             pred_y = torch.max(output, 1)[1].cpu().numpy()
 
-            feature = model.forward_threshold_features(x, threshold)
+            feature = model.forward_features(x)
 
             cp = torch.zeros(feature.shape).cuda()
             class_mask = torch.zeros(feature.shape).cuda()
@@ -825,7 +828,7 @@ def iterate_data_mymsp(data_loader, model, mask, p, threshold, class_mean):
             class_mask = class_mean[pred_y,:].cuda() 
 
             cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
-
+            cp = cp.clip(max=threshold)
             logits = model.forward_head(cp)
             # logits = logits * torch.exp(cos_sim[:, None])
             logits = logits * cos_sim[:, None]
@@ -886,7 +889,7 @@ def iterate_data_myLINE(data_loader, model, temper, mask, p, threshold, class_me
         with torch.no_grad():
             x = x.cuda()            
             # compute output, measure accuracy and record loss.
-            logits, feature = model.forward_DICE(x, threshold)
+            logits, feature = model.forward_LINE(x, threshold)
             pred_y = torch.max(logits, 1)[1].cpu().numpy()
             mask = model.fc.mask_f
 
@@ -898,6 +901,155 @@ def iterate_data_myLINE(data_loader, model, temper, mask, p, threshold, class_me
                 counter_cp = counter_cp + 1
             cos_sim = F.cosine_similarity(class_mask, feature, dim=1)
 
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my21(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model(x)  
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            feature = model.forward_threshold_features(x, threshold)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            L = mask.sum(dim=1)[0]
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+            # logits = model.forward_head(cp)
+            logits = model.forward_head_mask(cp, mask.cuda())
+            # logits = logits * torch.exp(cos_sim[:, None])
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_camscore(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        x = Variable(x.cuda(), requires_grad=True)   
+        output = model(x)
+        # idx = np.argmax(output.cpu().data.numpy(), axis=1)
+        class_loss, idx = torch.max(output, 1)[0], torch.max(output, 1)[1].cpu().numpy()
+        # backward
+        model.zero_grad()
+        # class_loss = output[0,id]
+        class_loss.backward()
+        # 生成cam
+        # grads = grad_block[b].cpu().data.numpy().squeeze()
+        # feature_map = feaure_block[b].cpu().data.numpy().squeeze()
+        # weights = np.mean(grads, axis=1)
+        _, _, H, W = x.shape
+        # cam = np.zeros(feature_map.shape[1:], dtype=np.float32)  # 二维，用于叠加
+        # grads = grads.reshape([grads.shape[0], -1])
+
+        
+        # weights = np.mean(grads, axis=1)	
+        # for i, w in enumerate(weights):
+        #     cam += w * feature_map[i, :, :]	# 特征图加权和
+        cam = np.maximum(cam, 0)
+        cam = cam / cam.max()
+        # cam = cv2.resize(cam, (W, H))
+        input_mask = (torch.exp(torch.tensor(cam))-1).cuda()
+        x = x[:,:,] * input_mask
+
+        output = model(x)  
+#         print(output.shape, output)
+
+        pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+        feature = model.forward_threshold_features(x, threshold)
+        cp = torch.zeros(feature.shape).cuda()
+        class_mask = torch.zeros(feature.shape).cuda()
+        cp = feature * mask[pred_y,:].cuda()
+        class_mask = class_mean[pred_y,:].cuda() 
+        L = mask.sum(dim=1)[0]
+        cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+
+        # logits = model.forward_head(cp)
+        logits = model.forward_head(cp)
+        # logits = logits * torch.exp(cos_sim[:, None])
+        logits = logits * cos_sim[:, None]
+
+        # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+        conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+        # conf = conf * cos_sim
+        confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my22(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    m = torch.nn.Softmax(dim=-1).cuda()
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            output = model.forward_threshold(x, threshold)
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+            value, _ = torch.max(m(output), dim=-1)
+
+            feature = model.features(x)
+            B, C, H, W = feature.shape
+            feature = torch.flatten(feature, 2)
+            weight = model.fc.weight[pred_y, :]
+            cammask = feature * weight[:, :, None]
+            cammask = cammask.sum(1)
+
+            cammask = torch.clamp(cammask,min=0.0)
+            # print(cammask.shape, cammask.mean(1).shape)
+            # cammask = cammask / cammask.mean(1)[:, None]
+            cammask = cammask / cammask.sum(1)[:, None]
+            cammask = torch.exp(cammask)
+            
+            thresh_min = np.percentile(cammask.cpu().numpy(), 20, axis=1)
+            thresh_max = np.percentile(cammask.cpu().numpy(), 40, axis=1)
+            # print(thresh.shape, thresh)
+            # for i in range(cammask.shape[0]):
+            #     # print(1-value[i].cpu())
+            #     # thresh = np.percentile(cammask[i].cpu().numpy(), 30*(1-value[i].cpu().numpy()))
+                
+            #     # cammask[i] = torch.clamp(cammask[i],min=thresh_min[i], max=thresh_max[i])
+            #     cammask[i] = torch.where(cammask[i]>=thresh_max[i],cammask[i],0)
+                # cammask[i] = torch.where(cammask[i]>=thresh,1,0)
+                
+                
+            feature = feature * cammask[:, None, :]
+            feature = torch.mean(feature, 2)
+            # feature = feature.clip(max=threshold)
+            # print(feature.shape)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+            cos_sim = F.cosine_similarity(class_mask, cp, dim=1)
+            cp = cp.clip(max=threshold)
+            # logits = model.forward_head_mask(cp, mask.cuda())
+            logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
             logits = logits * cos_sim[:, None]
 
             # v = torch.sum(torch.mul(class_mask,cp),dim=1)

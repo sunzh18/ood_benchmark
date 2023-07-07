@@ -244,6 +244,27 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_simodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'gradcam':
+        if args.model == 'resnet50':
+            model.layer4[-1].register_forward_hook(farward_hook)  # 9
+            model.layer4[-1].register_backward_hook(backward_hook)
+            # model.avgpool.register_forward_hook(farward_hook)  # 9
+            # model.avgpool.register_backward_hook(backward_hook)
+            # print(model)
+        elif args.model == 'densenet':
+            model.relu.register_forward_hook(farward_hook)  # 9
+            model.relu.register_backward_hook(backward_hook)
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_camscore(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_camscore(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
 
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
@@ -462,10 +483,11 @@ def show_gradcam(args, model, data_loader, dataset, mask, fc_w):
         # img = cv2.imread(imagepath)
         x = Variable(x.cuda(), requires_grad=True)   
         output = model(x)
-        idx = np.argmax(output.cpu().data.numpy())
+        # idx = np.argmax(output.cpu().data.numpy(), axis=1)
+        class_loss, idx = torch.max(output, 1)[0], torch.max(output, 1)[1].cpu().numpy()
         # backward
         model.zero_grad()
-        class_loss = output[0, idx]
+        # class_loss = output[0,id]
         class_loss.backward()
         # 生成cam
         grads_val = grad_block[b].cpu().data.numpy().squeeze()
@@ -473,7 +495,7 @@ def show_gradcam(args, model, data_loader, dataset, mask, fc_w):
         # print(f'fc_w{idx}: {fc_w[idx]}')
         print(f'{idx}')
         # 保存cam图片
-        cam_show_img(img, fmap, grads_val, output_dir, f'{b}+{idx}', mask[idx], args.p, fc_w[idx])
+        cam_show_img(img, fmap, grads_val, output_dir, f'{idx}+{b}', mask[idx], args.p, fc_w[idx])
 
 def test_gradcam(args):
     if args.in_dataset == "CIFAR-10":
@@ -482,7 +504,7 @@ def test_gradcam(args):
         trainset = torchvision.datasets.CIFAR10(root=data_path, train=True, download=False, transform=transform_test)
         train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
         valset = torchvision.datasets.CIFAR10(root=data_path, train=False, download=False, transform=transform_test)
-        val_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=True, **kwargs)
 
         num_classes = 10
 
@@ -492,7 +514,7 @@ def test_gradcam(args):
         trainset = torchvision.datasets.CIFAR100(root=data_path, train=True, download=False, transform=transform_test)
         train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
         valset = torchvision.datasets.CIFAR100(root=data_path, train=False, download=False, transform=transform_test)
-        val_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=False, **kwargs)
 
         num_classes = 100
 
@@ -511,8 +533,15 @@ def test_gradcam(args):
         trainset = torchvision.datasets.ImageFolder(os.path.join(root, 'train'), transform_test_largescale)
         train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
         valset = torchvision.datasets.ImageFolder(os.path.join(root, 'val'), transform_test_largescale)
-        val_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=True, **kwargs)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=True, **kwargs)
         num_classes = 1000
+    
+    elif args.in_dataset == "Places":
+        # Data loading code
+        valset = torchvision.datasets.ImageFolder("/data/Public/Datasets/Places", transform=transform_test_largescale)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=True, **kwargs)
+        num_classes = 1000
+        args.in_dataset = 'imagenet'
 
     args.num_classes = num_classes
 
@@ -527,12 +556,14 @@ def test_gradcam(args):
     # model.load_state_dict(checkpoint['state_dict'])
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
+    
     fc_w = extact_mean_std(args, model)
     mask, class_mean = get_class_mean2(args, fc_w)
     # mask, class_mean = get_class_mean(args)
     class_mean = class_mean.cuda()
     class_mean = class_mean.clip(max=args.threshold)
     # show_gradcam(args, model, train_dataloader, trainset, mask, fc_w)
+    # args.in_dataset = "Places"
     show_gradcam(args, model, val_dataloader, valset, mask, fc_w)
 
 if __name__ == "__main__":
@@ -554,7 +585,7 @@ if __name__ == "__main__":
         args.p_a = 10
         args.p_w = 10
     # args.threshold = 1e5
-
+    # main(args)
     test_gradcam(args)
     # test_train(args)
     # test_mask(args)

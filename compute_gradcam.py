@@ -45,8 +45,8 @@ def cam_show_img(img, feature_map, grads, out_dir, f, mask, p, fc_w):
     cammask = np.zeros_like(weights)
     cammask = np.where(weights >= thresh,1,0)
     cammask = torch.tensor(cammask)
-    print((mask-cammask).sum())
-    print(fc_w/weights)
+    # print((mask-cammask).sum())
+    # print(fc_w/weights)
 
 
     for i, w in enumerate(weights):
@@ -54,6 +54,7 @@ def cam_show_img(img, feature_map, grads, out_dir, f, mask, p, fc_w):
     cam = np.maximum(cam, 0)
     cam = cam / cam.max()
     cam = cv2.resize(cam, (W, H))
+
 
     heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
     cam_img = 0.3 * heatmap + 0.7 * img
