@@ -152,6 +152,31 @@ def get_class_mean3(args, fc_w):
     mask = torch.tensor(mask)
     return mask, torch.tensor(class_mean)
 
+def get_class_mean4(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
+    class_mean = np.squeeze(class_mean)
+
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    p = 0
+    if args.p:
+        p = args.p
+    thresh = np.percentile(fc_w, p, axis=1)
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(fc_w[i] >= thresh[i],1,0)
+        # class_mean[i,:] = class_mean[i,:] * mask[i,:]
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
+
 def test_model(model, data_loader, mask):
     num=0
     accu=0
@@ -572,6 +597,17 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
             in_scores = iterate_data_my22(in_loader, model, args.temperature_energy, mask, 0, args.threshold, class_mean)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my22(out_loader, model, args.temperature_energy, mask, 30, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score23':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my23(in_loader, model, args.temperature_energy, mask, 0, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my23(out_loader, model, args.temperature_energy, mask, 30, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
     in_examples = in_scores.reshape((-1, 1))
@@ -1223,7 +1259,7 @@ def main(args):
     model.eval()
 
     fc_w = extact_mean_std(args, model)
-    mask, class_mean = get_class_mean2(args, fc_w)
+    mask, class_mean = get_class_mean4(args, fc_w)
     # mask, class_mean = get_class_mean(args)
     class_mean = class_mean.cuda()
     # class_mean = class_mean.clip(max=args.threshold)
@@ -1376,20 +1412,30 @@ if __name__ == "__main__":
     parser = get_argparser()
 
     args = parser.parse_args()
+    
     if args.in_dataset == "CIFAR-10":
-        args.threshold = 1.6
+        if args.model == 'densenet':
+            args.threshold = 1.6
+        elif args.model == 'resnet18':
+            args.threshold = 0.8
         args.p_a = 90
         args.p_w = 90
 
     elif args.in_dataset == "CIFAR-100":
+        if args.model == 'densenet':
+            args.threshold = 1.7
+        elif args.model == 'resnet18':
+            args.threshold = 0.8
         args.p_a = 10
         args.p_w = 90
-        args.threshold = 1.7
-
+            
     elif args.in_dataset == "imagenet":
-        args.threshold = 1.0
+        args.threshold = 0.8
+        if args.model == 'mobilenet':
+            args.threshold = 0.2
         args.p_a = 10
         args.p_w = 10
+    
     # args.threshold = 1e5
     # analysis(args)
     # analysis_confidence(args)

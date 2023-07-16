@@ -749,7 +749,7 @@ def iterate_data_my20(data_loader, model, temper, mask, p, threshold, class_mean
 
             # v = torch.sum(torch.mul(class_mask,cp),dim=1)
             conf = temper * (torch.logsumexp((logits) / temper, dim=1))
-            # conf = conf * cos_sim
+            # conf = conf * torch.exp(cos_sim)
             confs.extend(conf.data.cpu().numpy())
 
     return np.array(confs)
@@ -1055,6 +1055,40 @@ def iterate_data_my22(data_loader, model, temper, mask, p, threshold, class_mean
             # v = torch.sum(torch.mul(class_mask,cp),dim=1)
             conf = temper * (torch.logsumexp((logits) / temper, dim=1))
             # conf = conf * cos_sim
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+def iterate_data_my23(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()        
+            output = model(x)      
+            # output = model.forward_threshold(x, threshold)
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            # feature = model.forward_threshold_features(x, threshold)
+            feature = model.forward_features(x)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            class_mask = class_mean[pred_y,:].cuda() 
+
+            cos_sim = F.cosine_similarity(class_mask, feature, dim=1)
+            
+            cp = cp.clip(max=threshold)
+            logits = model.forward_head(cp)
+            # logits = logits * torch.exp(cos_sim[:, None])
+            logits = logits * cos_sim[:, None]
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * torch.exp(cos_sim)
             confs.extend(conf.data.cpu().numpy())
 
     return np.array(confs)

@@ -41,7 +41,14 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
     elif args.score == 'dice':
-        
+        if args.in_dataset == "CIFAR-10":
+            args.threshold = 1.0
+            args.p = 10
+
+        elif args.in_dataset == "CIFAR-100":
+            args.threshold = 1.0
+            args.p = 30
+
         info = np.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_feat_stat.npy")
         model = get_model(args, num_classes, load_ckpt=True, info=info)
         model.eval()
@@ -50,7 +57,15 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_energy(out_loader, model, args.temperature_energy)
     elif args.score == 'dice_react':
-        args.threshold = 1.0
+        if args.in_dataset == "CIFAR-10":
+            args.threshold = 0.8
+            args.p = 10
+
+        elif args.in_dataset == "CIFAR-100":
+            args.threshold = 1.0
+            args.p = 30
+
+        # args.threshold = 1.0
         info = np.load(f"checkpoints/feature/{args.name}/{args.in_dataset}/{args.model}_feat_stat.npy")
         model = get_model(args, num_classes, load_ckpt=True, info=info)
         model.eval()
@@ -59,15 +74,30 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
     elif args.score == 'react':
-        args.threshold = 1.0
+        # args.threshold = 1.0      
+        args.threshold = 0.7    #resnet18
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_react(in_loader, model, args.temperature_energy, args.threshold)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
     elif args.score == 'LINE':
-        args.p_a = 90
-        args.p_w = 90
-        args.threshold = 1.0  #0.8
+        if args.in_dataset == "CIFAR-10":
+            args.threshold = 1.0
+            args.p_a = 90
+            args.p_w = 90
+
+        elif args.in_dataset == "CIFAR-100":
+            args.threshold = 1.0
+            args.p_a = 10
+            args.p_w = 90
+                
+        elif args.in_dataset == "imagenet":
+            args.threshold = 0.8
+            args.p_a = 10
+            args.p_w = 10
+        # args.p_a = 90
+        # args.p_w = 90
+        # args.threshold = 1.0  #0.8
         info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
         model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
         model.eval()
@@ -88,14 +118,16 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
                 lam = 2.25
             elif args.model == 'resnet18':
                 lam = 3.3
-            lam = 0.8
+            elif args.model == 'densenet':
+                lam = 0.8
 
         elif args.in_dataset == 'CIFAR-100':
             if args.model == 'wrn':
                 lam = 1.5
             elif args.model == 'resnet18':
                 lam = 1.35
-            lam = 0.8
+            elif args.model == 'densenet':
+                lam = 0.8
         # print(feature_std.shape)
         args.bats = lam
         logger.info("Processing in-distribution data...")

@@ -49,7 +49,7 @@ class NetworkBlock(nn.Module):
         return self.layer(x)
 
 class WideResNet(nn.Module):
-    def __init__(self, depth, num_classes, widen_factor=1, dropRate=0.0, p=None, info=None):
+    def __init__(self, depth, num_classes, widen_factor=1, dropRate=0.0, p=None, p_w=None, p_a=None, info=None, clip_threshold=1e10, LU = False):
         super(WideResNet, self).__init__()
         nChannels = [16, 16*widen_factor, 32*widen_factor, 64*widen_factor, 64*widen_factor]
         assert((depth - 4) % 6 == 0)
@@ -68,15 +68,20 @@ class WideResNet(nn.Module):
         # global average pooling and classifier
         self.bn1 = nn.BatchNorm2d(nChannels[3])
         self.relu = nn.ReLU(inplace=True)
-
+        self.avgp2d = nn.AvgPool2d(8)
         self.ID_mat = torch.eye(num_classes).cuda()
 
         # self.fc = nn.Linear(nChannels[3], num_classes, bias=False)
         if p is None or info is None:
             self.fc = nn.Linear(nChannels[3], num_classes)
         else:
-            print('use dice')
-            self.fc = RouteDICE(nChannels[3], num_classes, p=p, info=info)
+            if LU:
+                print('use LINE')
+                self.fc = RouteLUNCH(nChannels[3], num_classes, p_w=p_w, p_a=p_a, info=info, clip_threshold = clip_threshold)
+            else:
+                print('use dice')
+                self.fc = RouteDICE(nChannels[3], num_classes, p=p, info=info)
+     
         # self.fc = nn.Linear(nChannels[3], num_classes)
         # self.fc.weight.requires_grad = False        # Freezing the weights during training
         self.nChannels = nChannels[3]
@@ -110,7 +115,14 @@ class WideResNet(nn.Module):
         out = self.fc(out)
         return out
 
-    
+    def forward_threshold_features(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.relu(self.bn1(feat))
+        out = F.avg_pool2d(feat, 8)
+        feat = feat.clip(max=threshold)
+        out = out.view(-1, self.nChannels)  
+        # out = F.normalize(out, dim=1, p=2)
+        return out
 
     def forward_features(self, x):
         feat = self.features(x)
@@ -154,6 +166,15 @@ class WideResNet(nn.Module):
         out = self.fc(out)
         return out
 
+    def forward_LINE(self, x, threshold=1e10):
+        out = self.features(x)
+        out = self.relu(self.bn1(out))
+        out = F.avg_pool2d(out, 8)
+        out = out.clip(max=threshold)
+        out = out.view(-1, self.nChannels)
+        out, feat = self.fc(out)
+        return out, feat
+
     def feature_list(self, x):
         out_list = []
         out = self.conv1(x)
@@ -186,6 +207,57 @@ class WideResNet(nn.Module):
         out = self.block3(out)
         return out
     
+    def _forward(self, x):
+        self.activations = []
+        self.gradients = []
+        self.zero_grad()
+        
+        out = self.features(x)
+        out = self.relu(self.bn1(out))
+        out = self.avgp2d(out)
+        out = out.view(-1, self.nChannels)
+        out = self.fc(out)
+        return out
+
+    # LINE 
+    def remove_handles(self):
+        for handle in self.handles_list:
+            handle.remove()
+        self.handles_list.clear()
+        self.activations = []
+        self.gradients = []
+    # LINE 
+    def _compute_taylor_scores(self, inputs, labels):
+        self._hook_layers()
+        outputs = self._forward(inputs)
+        outputs[0, labels.item()].backward(retain_graph=True)
+
+        first_order_taylor_scores = []
+        self.gradients.reverse()
+
+        for i, layer in enumerate(self.activations):
+            first_order_taylor_scores.append(torch.mul(layer, self.gradients[i]))
+                
+        self.remove_handles()
+        return first_order_taylor_scores, outputs
+    # LINE 
+    def _hook_layers(self):
+        def backward_hook_relu(module, grad_input, grad_output):
+            self.gradients.append(grad_output[0].to(self.device))
+
+        def forward_hook_relu(module, input, output):
+            # mask output by pruned_activations_mask
+            # In the first model(input) call, the pruned_activations_mask
+            # is not yet defined, thus we check for emptiness
+            if self.pruned_activations_mask:
+              output = torch.mul(output, self.pruned_activations_mask[len(self.activations)].to(self.device)) #+ self.pruning_biases[len(self.activations)].to(self.device)
+            self.activations.append(output.to(self.device))
+            return output
+
+        for module in self.modules():
+            if isinstance(module, nn.AvgPool2d):
+                self.handles_list.append(module.register_forward_hook(forward_hook_relu))
+                self.handles_list.append(module.register_backward_hook(backward_hook_relu))
 
 def WideResNet28(**kwargs):
     return WideResNet(depth=28, widen_factor=10, **kwargs)
