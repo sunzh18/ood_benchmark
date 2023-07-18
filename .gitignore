@@ -7,4 +7,5 @@ draw_analysis/
 __pycache__/
 cache/
 gradcam/
+sensitivity_result/
 *.pyc

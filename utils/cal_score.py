@@ -135,7 +135,11 @@ def iterate_data_mahalanobis(data_loader, model, num_classes, sample_mean, preci
         # if b % 10 == 0:
         #     logger.info('{} batches processed'.format(b))
         x = x.cuda()
-
+        # feature = model.forward_features(x)
+        # for f in feature:
+        #     scores = -np.array((((f - sample_mean) @ precision) * (f - sample_mean)).sum(axis=-1).min().cpu().item())
+        #     # print(scores)
+        #     confs.append(scores)
         Mahalanobis_scores = get_Mahalanobis_score(x, model, num_classes, sample_mean, precision, num_output, magnitude)
         scores = -regressor.predict_proba(Mahalanobis_scores)[:, 1]
         confs.extend(scores)

@@ -141,21 +141,43 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_gradnorm(out_loader, model, args.temperature_gradnorm, num_classes)
     elif args.score == 'Mahalanobis':
-        sample_mean, precision, lr_weights, lr_bias, magnitude = np.load(
-            os.path.join(args.mahalanobis_param_path, 'results.npy'), allow_pickle=True)
-        sample_mean = [s.cuda() for s in sample_mean]
-        precision = [p.cuda() for p in precision]
+        save_dir = os.path.join('cache', 'mahalanobis', args.name)
+        lr_weights, lr_bias, magnitude = np.load(
+            os.path.join(save_dir, f'{args.in_dataset}_{args.model}_results.npy'), allow_pickle=True)
+        
 
+        # regressor = LogisticRegressionCV(cv=2).fit([[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]],
+        #                                            [0, 0, 1, 1])
         regressor = LogisticRegressionCV(cv=2).fit([[0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1], [1, 1, 1, 1]],
                                                    [0, 0, 1, 1])
+        # regressor = LogisticRegressionCV(cv=2).fit([[0], [0], [1], [1]],
+                                                #    [0, 0, 1, 1])
 
         regressor.coef_ = lr_weights
         regressor.intercept_ = lr_bias
 
-        temp_x = torch.rand(2, 3, 480, 480)
+        temp_x = torch.rand(2, 3, 32, 32)
         temp_x = Variable(temp_x).cuda()
-        temp_list = model(x=temp_x, layer_index='all')[1]
+        # temp_list = model(x=temp_x, layer_index='all')[1]
+        temp_list = model.feature_list(temp_x)[1]
         num_output = len(temp_list)
+
+        # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+        file_folder = os.path.join('cache', 'mahalanobis', args.name)
+        filename1 = os.path.join(file_folder, f'{args.in_dataset}_{args.model}_class_mean.npy')
+        filename2 = os.path.join(file_folder, f'{args.in_dataset}_{args.model}_precision.npy')
+        sample_mean = np.load(filename1, allow_pickle=True)
+        precision = np.load(filename2, allow_pickle=True)
+        # sample_mean = [torch.from_numpy(s).cuda() for s in sample_mean]
+        sample_mean = [s.cuda() for s in sample_mean]
+
+        precision = [torch.from_numpy(p).float().cuda() for p in precision]
+        # class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+        # precision = np.load(f"{file_folder}/{args.model}_precision.npy")
+
+        # class_mean = torch.from_numpy(class_mean).cuda().float()
+        # precision = torch.from_numpy(precision).cuda().float()
+
 
         logger.info("Processing in-distribution data...")
         in_scores = iterate_data_mahalanobis(in_loader, model, num_classes, sample_mean, precision,
@@ -208,6 +230,7 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
     out_examples = out_scores.reshape((-1, 1))
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
+    auroc, aupr_in, aupr_out, fpr95 = auroc*100, aupr_in*100, aupr_out*100, fpr95*100
     
     # result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
     # fp = open(result_path,'a+')
@@ -277,6 +300,12 @@ def main(args):
         context.writerow(result)
         fp.close()
 
+    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}.txt")
+    if not os.path.exists(result_path):
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write('method  ')
+            f.write('FPR95  ')
+            f.write('AUROC\n')
 
     in_dataset = args.in_dataset
 
@@ -361,6 +390,17 @@ def main(args):
         context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
         context.writerow(result)
         fp.close()
+        
+        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}.txt")
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write("{} & ".format(args.score))
+            for i in range(len(AUroc)):
+                fpr95 = Fpr95[i]
+                auroc = AUroc[i]
+                f.write("{:.2f} & ".format(fpr95))
+                f.write("{:.2f} & ".format(auroc))
+            f.write("{:.2f} & ".format(avg_fpr95))
+            f.write("{:.2f}\n".format(avg_auroc))
 
         logger.info('============Results for {}============'.format(args.score))
         logger.info('=======in dataset: {}; ood dataset: Average============'.format(args.in_dataset))
@@ -396,6 +436,11 @@ def find_threshold(args, model, dataloader):
     print(threshold)
     args.threshold = threshold
     return 
+
+
+
+
+
 
 if __name__ == "__main__":
     parser = get_argparser()

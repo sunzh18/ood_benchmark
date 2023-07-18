@@ -7,7 +7,7 @@ from datasets.svhn_loader import SVHN
 
 cifar_out_datasets = ['SVHN', 'LSUN_C', 'LSUN_R', 'iSUN', 'Textures', 'Places']
 # 'Tinyimagenet'
-imagenet_out_datasets = ['Textures', 'Places', 'SUN', 'iNat']
+imagenet_out_datasets = ['iNat', 'SUN', 'Places', 'Textures']
 
 
 imagesize = 32

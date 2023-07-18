@@ -215,11 +215,11 @@ class DenseNet3(nn.Module):
 
         out_list = []
         out = self.conv1(x)
-        # out_list.append(out)
+        out_list.append(out)
         out = self.trans1(self.block1(out))
-        # out_list.append(out)
+        out_list.append(out)
         out = self.trans2(self.block2(out))
-        # out_list.append(out)
+        out_list.append(out)
         out = self.block3(out)
         out = self.relu(self.bn1(out))
         out_list.append(out)

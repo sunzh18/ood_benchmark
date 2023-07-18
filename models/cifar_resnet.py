@@ -368,13 +368,13 @@ class ResNetCifar(AbstractResNet):
     def feature_list(self, x):
         out_list = []
         out = self.relu(self.bn1(self.conv1(x)))
-        # out_list.append(out)
+        out_list.append(out)
         out = self.layer1(out)
-        # out_list.append(out)
+        out_list.append(out)
         out = self.layer2(out)
-        # out_list.append(out)
+        out_list.append(out)
         out = self.layer3(out)
-        # out_list.append(out)
+        out_list.append(out)
         out = self.layer4(out)
         
         out_list.append(out)
@@ -384,17 +384,17 @@ class ResNetCifar(AbstractResNet):
         return y, out_list
 
     def intermediate_forward(self, x, layer_index=4):
-    # if layer_index >= 0:
-        # out = self.maxpool(self.relu(self.bn1(self.conv1(x))))
-        out = self.relu(self.bn1(self.conv1(x)))
-    # if layer_index >= 1:
-        out = self.layer1(out)
-    # if layer_index >= 2:
-        out = self.layer2(out)
-    # if layer_index >= 3:
-        out = self.layer3(out)
-    # if layer_index >= 4:
-        out = self.layer4(out)
+        if layer_index >= 0:
+            # out = self.maxpool(self.relu(self.bn1(self.conv1(x))))
+            out = self.relu(self.bn1(self.conv1(x)))
+        if layer_index >= 1:
+            out = self.layer1(out)
+        if layer_index >= 2:
+            out = self.layer2(out)
+        if layer_index >= 3:
+            out = self.layer3(out)
+        if layer_index >= 4:
+            out = self.layer4(out)
         # out = out.clip(max=1.0)
         return out
 
