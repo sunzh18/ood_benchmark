@@ -1148,13 +1148,6 @@ def analysis_feature(args):
         out_dataset = args.out_dataset
         loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
         out_loader = loader_out_dict.val_ood_loader
-
-        in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
-        start_time = time.time()
-        out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
-        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
-        end_time = time.time()
-
     
     else:
         out_datasets = []
@@ -1270,11 +1263,12 @@ def analysis_sensitivity(args):
     model.eval()
 
     fc_w = extact_mean_std(args, model)
-    
-    for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]:
+    # [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+    for p in [99]:
         args.p = p
         mask, class_mean = get_class_mean4(args, fc_w)
         class_mean = class_mean.cuda()
+        in_scores=None
         if args.out_dataset is not None:
             out_dataset = args.out_dataset
             loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))

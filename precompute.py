@@ -169,13 +169,13 @@ def get_class_mean_precision(args, model, num_classes, train_loader):
     for mean in class_mean:
         print(mean.shape)
         print(mean)
-    class_mean = np.array([item.cpu().detach().numpy() for item in class_mean])
-    precision = np.array([item.cpu().detach().numpy() for item in precision])
+    # class_mean = np.array([item.cpu().detach().numpy() for item in class_mean])
+    # precision = np.array([item.cpu().detach().numpy() for item in precision])
 
-    class_mean = np.squeeze(class_mean)
-    precision = np.squeeze(precision)
+    # class_mean = np.squeeze(class_mean)
+    # precision = np.squeeze(precision)
 
-    print(class_mean.shape, precision.shape)
+    # print(class_mean.shape, precision.shape)
 
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     if not os.path.isdir(file_folder):

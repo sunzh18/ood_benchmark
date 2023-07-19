@@ -368,13 +368,13 @@ class ResNetCifar(AbstractResNet):
     def feature_list(self, x):
         out_list = []
         out = self.relu(self.bn1(self.conv1(x)))
-        out_list.append(out)
+        # out_list.append(out)
         out = self.layer1(out)
-        out_list.append(out)
+        # out_list.append(out)
         out = self.layer2(out)
-        out_list.append(out)
+        # out_list.append(out)
         out = self.layer3(out)
-        out_list.append(out)
+        # out_list.append(out)
         out = self.layer4(out)
         
         out_list.append(out)

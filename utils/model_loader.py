@@ -49,8 +49,10 @@ def get_model(args, num_classes, load_ckpt=True, info=None, LU=False):
     device = torch.device("cuda") 
     if train_on_gpu:                                                   #部署到GPU上
         device = torch.device("cuda") 
+        print('cuda')
     else:
         device = torch.device("cpu")
+        print('cpu')
     model = model.to(device) 
 
     # model = nn.DataParallel(model)
