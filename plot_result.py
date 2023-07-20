@@ -274,13 +274,14 @@ def get_class_mean4(args, fc_w):
     for i in range(mask.shape[0]):
         mask[i] = np.where(fc_w[i] >= thresh[i],1,0)
         # class_mean[i,:] = class_mean[i,:] * mask[i,:]
-
+    # print(thresh)
+    print(p, thresh.mean(0))
     # mask = np.where(class_mean>thresh,1,0)
 
     # print(mask)
     index = np.argwhere(mask == 1)
     mask = torch.tensor(mask)
-    return mask, torch.tensor(class_mean)
+    return thresh
 
 
 def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset, classid):
@@ -334,31 +335,40 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     filename = os.path.join(save_dir, f'{classid}.pdf')
     plt.savefig(filename)
 
-def draw_sensitivity(args):
-    # 创建一些模拟数据
-    np.random.seed(0)
-    epochs = np.arange(1, 51)
-    training_accuracy = np.random.uniform(0.6, 0.9, size=50) + 0.01*epochs
-    validation_accuracy = np.random.uniform(0.5, 0.8, size=50) + 0.01*epochs
-    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+def draw_sensitivity(args, auc, fpr95, p, save_dir):
 
-    # 确保准确率不超过1
-    training_accuracy = np.clip(training_accuracy, 0, 1)
-    validation_accuracy = np.clip(validation_accuracy, 0, 1)
+    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
 
     # 以上内容是模拟数据 请忽略
     # 画图部分开始
-
-    # 绘制训练准确率和验证准确率
     plt.figure(figsize=(10, 6))
-    plt.plot(epochs, training_accuracy, 'r', label='Training Accuracy')
-    plt.plot(epochs, validation_accuracy, 'b', label='Validation Accuracy')
-    plt.title('Training and Validation Accuracy over Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend(loc='upper right')
+
+    # plt.plot(p, auc, color='blue', label='AUROC')
+    # plt.xlabel('Pruning percentile')
+    # plt.ylabel('AUROC')
+
+    # plt.plot(fpr95, color='red', label='FPR95')
+    # plt.ylabel('FPR95')
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+    ax1.plot(p, auc, 'o-', color='blue', label='AUROC')
+    ax1.set_xlabel('Pruning percentile')
+    ax1.set_ylabel('AUROC')
+    ax2.plot(p, fpr95, 's-', color='red', label='FPR95')
+    ax2.set_ylabel('FPR95')
+
+    # plt.xlim(0, 1.0)
+    plt.xticks(p, [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99])
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    plt.legend(handles1+handles2, labels1+labels2, loc='upper left')
+
+    # plt.title('Training and Validation Accuracy over Epochs')
+    # plt.legend(loc='upper right')
     plt.grid(True)
-    plt.savefig('xxx.pdf')
+
+    filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}.pdf')
+    plt.savefig(filename)
 
 kwargs = {'num_workers': 2, 'pin_memory': True}
 imagesize = 32
@@ -427,21 +437,56 @@ def test_train(args):
     mask = get_class_mean(args)
 
 def sensitivity(args):
-    args.logdir='plot/sensitivity'
-    # logger = log.setup_logger(args)
-    in_dataset = args.in_dataset
-    args.score = 'my_score23'
-    save_dir = os.path.join(args.logdir, args.name, args.model)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    filepath = os.path.join('sensitivity_result', args.name, args.model)
-    filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
-    data_array = []
-    with open(filename) as csv_file:
-        csv_reader = csv.reader(csv_file, skiprows=1)
-        for row in csv_reader:
-            data_array.append(row)
-        print(data_array)
+    # args.logdir='plot/sensitivity'
+    logger = log.setup_logger(args)
+    # in_dataset = args.in_dataset
+    # args.score = 'my_score23'
+    # save_dir = os.path.join(args.logdir, args.name, args.model)
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir)
+    # filepath = os.path.join('sensitivity_result', args.name, args.model)
+    # filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
+    # data_array = []
+    # with open(filename) as csv_file:
+    #     csv_reader = csv.reader(csv_file)
+    #     for row in csv_reader:
+    #         data_array.append(row)
+    #     print(data_array)
+    
+    # Auc = []
+    # Fpr95 = []
+    # for i in range(len(data_array)):
+    #     if i != 0:
+    #         data = data_array[i]
+    #         auc = float(data[2])
+    #         fpr95 = float(data[3])
+    #         Auc.append(auc)
+    #         Fpr95.append(fpr95)
+    # Auc = np.array(Auc)
+    # Fpr95 = np.array(Fpr95)
+
+    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+    # draw_sensitivity(args, Auc, Fpr95, p, save_dir)
+    args.logdir='sensitivity_result'
+    logger = log.setup_logger(args)
+    args.p = 80
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+    in_scores=None
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model.eval()
+    fc_w = extact_mean_std(args, model)
+    for x in p:
+        args.p = x * 100
+        thresh = get_class_mean4(args, fc_w)
+        logger.info("percentile: {}, thresh: {}".format(args.p, thresh.mean(0)))
+    
+    # mask, class_mean = get_class_mean4(args, fc_w)
     
     
 
