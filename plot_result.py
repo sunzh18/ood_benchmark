@@ -335,7 +335,7 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     filename = os.path.join(save_dir, f'{classid}.pdf')
     plt.savefig(filename)
 
-def draw_sensitivity(args, auc, fpr95, p, save_dir):
+def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
 
     p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
 
@@ -343,28 +343,24 @@ def draw_sensitivity(args, auc, fpr95, p, save_dir):
     # 画图部分开始
     plt.figure(figsize=(10, 6))
 
-    # plt.plot(p, auc, color='blue', label='AUROC')
-    # plt.xlabel('Pruning percentile')
-    # plt.ylabel('AUROC')
+    plt.plot(p, auc, 'o-', color='red', label='ours')
+    plt.plot(p, sota, '--', color='blue', label='LINe')
+
+    plt.xlabel('Pruning percentile')
+    plt.ylabel('AUROC')
 
     # plt.plot(fpr95, color='red', label='FPR95')
     # plt.ylabel('FPR95')
-    fig, ax1 = plt.subplots()
-    ax2 = ax1.twinx()
-    ax1.plot(p, auc, 'o-', color='blue', label='AUROC')
-    ax1.set_xlabel('Pruning percentile')
-    ax1.set_ylabel('AUROC')
-    ax2.plot(p, fpr95, 's-', color='red', label='FPR95')
-    ax2.set_ylabel('FPR95')
+
+    # ax2.plot(p, fpr95, 's-', color='red', label='FPR95')
+    # ax2.set_ylabel('FPR95')
 
     # plt.xlim(0, 1.0)
     plt.xticks(p, [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99])
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    plt.legend(handles1+handles2, labels1+labels2, loc='upper left')
+
 
     # plt.title('Training and Validation Accuracy over Epochs')
-    # plt.legend(loc='upper right')
+    plt.legend(loc='lower right')
     plt.grid(True)
 
     filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}.pdf')
@@ -437,54 +433,63 @@ def test_train(args):
     mask = get_class_mean(args)
 
 def sensitivity(args):
-    # args.logdir='plot/sensitivity'
-    logger = log.setup_logger(args)
-    # in_dataset = args.in_dataset
-    # args.score = 'my_score23'
-    # save_dir = os.path.join(args.logdir, args.name, args.model)
-    # if not os.path.exists(save_dir):
-    #     os.makedirs(save_dir)
-    # filepath = os.path.join('sensitivity_result', args.name, args.model)
-    # filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
-    # data_array = []
-    # with open(filename) as csv_file:
-    #     csv_reader = csv.reader(csv_file)
-    #     for row in csv_reader:
-    #         data_array.append(row)
-    #     print(data_array)
+    args.logdir='plot/sensitivity'
+    # logger = log.setup_logger(args)
+    in_dataset = args.in_dataset
+    args.score = 'my_score23'
+    save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    filepath = os.path.join('sensitivity_result', args.name, args.model)
+    filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
+    data_array = []
+    with open(filename) as csv_file:
+        csv_reader = csv.reader(csv_file)
+        for row in csv_reader:
+            data_array.append(row)
+        print(data_array)
     
-    # Auc = []
-    # Fpr95 = []
-    # for i in range(len(data_array)):
-    #     if i != 0:
-    #         data = data_array[i]
-    #         auc = float(data[2])
-    #         fpr95 = float(data[3])
-    #         Auc.append(auc)
-    #         Fpr95.append(fpr95)
-    # Auc = np.array(Auc)
-    # Fpr95 = np.array(Fpr95)
+    Auc = []
+    Fpr95 = []
+    for i in range(len(data_array)):
+        if i != 0:
+            data = data_array[i]
+            auc = float(data[2])
+            fpr95 = float(data[3])
+            Auc.append(auc)
+            Fpr95.append(fpr95)
+    Auc = np.array(Auc)
+    Fpr95 = np.array(Fpr95)
+
+    if args.in_dataset == "CIFAR-10":
+        sota = [96.57] * len(Auc)
+
+    elif args.in_dataset == "CIFAR-100":
+        sota = [88.71] * len(Auc)
+            
+    elif args.in_dataset == "imagenet":
+        sota = [95.02] * len(Auc)
 
     p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
-    # draw_sensitivity(args, Auc, Fpr95, p, save_dir)
-    args.logdir='sensitivity_result'
-    logger = log.setup_logger(args)
-    args.p = 80
-    loader_in_dict = get_dataloader_in(args, split=('val'))
-    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
-    args.num_classes = num_classes
-    in_scores=None
+    draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
+    # args.logdir='sensitivity_result'
+    # logger = log.setup_logger(args)
+    # args.p = 80
+    # loader_in_dict = get_dataloader_in(args, split=('val'))
+    # in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    # args.num_classes = num_classes
+    # in_scores=None
 
-    load_ckpt = False
-    if args.model_path != None:
-        load_ckpt = True
-    model = get_model(args, num_classes, load_ckpt=load_ckpt)
-    model.eval()
-    fc_w = extact_mean_std(args, model)
-    for x in p:
-        args.p = x * 100
-        thresh = get_class_mean4(args, fc_w)
-        logger.info("percentile: {}, thresh: {}".format(args.p, thresh.mean(0)))
+    # load_ckpt = False
+    # if args.model_path != None:
+    #     load_ckpt = True
+    # model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    # model.eval()
+    # fc_w = extact_mean_std(args, model)
+    # for x in p:
+    #     args.p = x * 100
+    #     thresh = get_class_mean4(args, fc_w)
+    #     logger.info("percentile: {}, thresh: {}".format(args.p, thresh.mean(0)))
     
     # mask, class_mean = get_class_mean4(args, fc_w)
     
