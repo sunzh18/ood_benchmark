@@ -270,8 +270,9 @@ class DenseNet3(nn.Module):
         out = F.avg_pool2d(out, 8)
         out = out.clip(max=threshold)
         out = out.view(-1, self.in_planes)
+        feature = out
         out, feat = self.fc(out)
-        return out, feat
+        return out, feature
 
     def _forward(self, x):
         self.activations = []

@@ -46,6 +46,7 @@ def iterate_data_odin(data_loader, model, epsilon, temper, logger):
 
         # Adding small perturbations to images
         tempInputs = torch.add(x.data, -epsilon, gradient)
+        # tempInputs = torch.add(x.data, gradient, -epsilon)
         outputs = model(Variable(tempInputs))
         outputs = outputs / temper
         # Calculating the confidence after adding perturbations

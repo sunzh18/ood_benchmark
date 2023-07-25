@@ -621,6 +621,18 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_cosine(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
+    elif args.score == 'ablation':
+        p = 0
+        if args.p:
+            p = args.p
+
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_ablation(in_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_ablation(out_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
 
@@ -1326,7 +1338,115 @@ def analysis_sensitivity(args):
             context.writerow(result)
             fp.close()
 
+def analysis_react_sensitivity(args):
+    args.logdir='sensitivity_result'
+    logger = log.setup_logger(args)
+    result_path = os.path.join('sensitivity_result', args.name, args.model, f"react_{args.in_dataset}_{args.score}.csv")
+    if not os.path.exists(result_path):
+        fp = open(result_path,'a+')
+        result = []
+        result.append('model')
+        result.append('out-dataset')
+        result.append('FPR95')
+        result.append('AUROC')
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
 
+    result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.txt")
+    if not os.path.exists(result_path):
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write('method  ')
+            f.write('FPR95  ')
+            f.write('AUROC\n')
+
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+    in_scores=None
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model.eval()
+    
+    fc_w = extact_mean_std(args, model)
+    mask, class_mean = get_class_mean4(args, fc_w)
+    class_mean = class_mean.cuda()
+    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.25, 1e5]:
+        args.threshold = threshold
+        
+        in_scores=None
+        if args.out_dataset is not None:
+            out_dataset = args.out_dataset
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+
+
+            start_time = time.time()
+            run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+            print(in_scores)
+            end_time = time.time()
+
+            logger.info("Total running time: {}".format(end_time - start_time))
+        
+        else:  
+            out_datasets = []
+            AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+            if in_dataset == "imagenet":
+                out_datasets = imagenet_out_datasets
+            else:
+                out_datasets = cifar_out_datasets
+            for out_dataset in out_datasets:
+                loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+                out_loader = loader_out_dict.val_ood_loader
+
+                in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+                logger.info(f"Using an in-distribution set with {len(in_set)} images.")
+                logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
+
+
+                start_time = time.time()
+                auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+                end_time = time.time()
+                logger.info("Total running time: {}".format(end_time - start_time))
+
+                AUroc.append(auroc)
+                AUPR_in.append(aupr_in)
+                AUPR_out.append(aupr_out)
+                Fpr95.append(fpr95)
+            avg_auroc = sum(AUroc) / len(AUroc)
+            avg_aupr_in = sum(AUPR_in) / len(AUPR_in)
+            avg_aupr_out = sum(AUPR_out) / len(AUPR_out)
+            avg_fpr95 = sum(Fpr95) / len(Fpr95)
+
+            result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.csv")
+            fp = open(result_path,'a+')
+            result = []
+
+            result.append(f'p: {args.p}/threshold{args.threshold}')
+            result.append('Average')
+            result.append("{:.2f}".format(avg_fpr95))
+            result.append("{:.2f}".format(avg_auroc))
+            context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+            context.writerow(result)
+            fp.close()
+
+            result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.txt")
+            with open(result_path, 'a+', encoding='utf-8') as f:
+                f.write("threshold={:.2f} & ".format(args.threshold))
+                f.write("{:.2f} & ".format(avg_fpr95))
+                f.write("{:.2f}\n".format(avg_auroc))
 
 def main(args):
     logger = log.setup_logger(args)
@@ -1426,7 +1546,7 @@ def main(args):
         fp = open(result_path,'a+')
         result = []
 
-        result.append(f'p: {args.p}/threshold{args.threshold}')
+        result.append(f'p: {args.p}/threshold{args.threshold}/cos:{args.cos}')
         result.append('Average')
         result.append("{:.4f}".format(avg_auroc))
         result.append("{:.4f}".format(avg_aupr_in))
@@ -1540,6 +1660,7 @@ if __name__ == "__main__":
     if args.in_dataset == "CIFAR-10":
         if args.model == 'densenet':
             args.threshold = 1.6
+            # args.threshold = 1.2
         elif args.model == 'resnet18':
             args.threshold = 0.8
         args.p_a = 90
@@ -1547,7 +1668,8 @@ if __name__ == "__main__":
 
     elif args.in_dataset == "CIFAR-100":
         if args.model == 'densenet':
-            args.threshold = 1.7
+            args.threshold = 1.6
+            # args.threshold = 1.9
         elif args.model == 'resnet18':
             args.threshold = 0.8
         args.p_a = 10
@@ -1555,6 +1677,7 @@ if __name__ == "__main__":
             
     elif args.in_dataset == "imagenet":
         args.threshold = 0.8
+        # args.threshold = 0.84
         if args.model == 'mobilenet':
             args.threshold = 0.2
         args.p_a = 10
@@ -1566,6 +1689,7 @@ if __name__ == "__main__":
     # analysis_feature(args)
     # analysis_cos(args)
     main(args)
+    # analysis_react_sensitivity(args)
     # analysis_sensitivity(args)
     # test_train(args)
     # test_mask(args)

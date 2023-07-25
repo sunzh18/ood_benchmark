@@ -421,8 +421,9 @@ class ResNet(AbstractResNet):
         feat = self.avgpool(feat)
         feat = feat.clip(max=threshold)
         feat = feat.view(feat.size(0), -1)
+        feature = feat
         out, feat = self.fc(feat)
-        return out, feat
+        return out, feature
 
     def forward_threshold_features(self, x, threshold=1e10):
         feat = self.features(x)

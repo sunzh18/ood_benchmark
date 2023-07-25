@@ -114,7 +114,7 @@ def get_class_feature(model, num_classes, feature_list, train_loader):
 
 def get_features(args, model, dataloader, mask=None):
     features = []
-    for b, (x, y) in enumerate(dataloader):
+    for b, (x, y) in enumerate(tqdm(dataloader)):
         with torch.no_grad():
             x = x.cuda()            
             # print(x.size())
@@ -305,15 +305,15 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     # plt.plot(v1_sorted, color='yellow', label='v1')
     # plt.plot(v2_sorted, color='green', label='v2')
 
-    plt.bar(np.arange(len(in_sorted)), in_sorted, color='red', label='v1')
-    plt.bar(np.arange(len(out_sorted)), out_sorted, color='green', label='v2')
+    plt.bar(np.arange(len(in_sorted)), in_sorted, color='red', label='v1', alpha=0.7)
+    plt.bar(np.arange(len(out_sorted)), out_sorted, color='green', label='v2', alpha=0.7)
 
     plt.xlabel('Channel')
     plt.ylabel('Activation')
 
     ax = plt.gca().twinx()
 
-    plt.plot(fc[sorted_indices], color='blue', label='w')
+    plt.plot(fc[sorted_indices], color='darkblue', label='w', alpha=0.8)
     plt.ylabel('Classifer weight')
 
     # 同时显示左右两个图例
@@ -337,15 +337,16 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
 
 def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
 
-    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
-
+    # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+    p = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
     # 以上内容是模拟数据 请忽略
     # 画图部分开始
     plt.figure(figsize=(10, 6))
 
     plt.plot(p, auc, 'o-', color='red', label='ours')
-    plt.plot(p, sota, '--', color='blue', label='LINe')
-
+    # plt.plot(p, sota, '--', color='blue', label='LINe')
+    plt.axhline(y=sota, color='blue', linestyle='--', label='LINe')
+    plt.text(0, sota, f'{sota:.2f}', color='green', va='bottom', ha='right')
     plt.xlabel('Pruning percentile')
     plt.ylabel('AUROC')
 
@@ -356,7 +357,7 @@ def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # ax2.set_ylabel('FPR95')
 
     # plt.xlim(0, 1.0)
-    plt.xticks(p, [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99])
+    plt.xticks(p, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
 
 
     # plt.title('Training and Validation Accuracy over Epochs')
@@ -463,12 +464,15 @@ def sensitivity(args):
 
     if args.in_dataset == "CIFAR-10":
         sota = [96.57] * len(Auc)
+        sota = 96.57
 
     elif args.in_dataset == "CIFAR-100":
         sota = [88.71] * len(Auc)
+        sota = 88.71
             
     elif args.in_dataset == "imagenet":
         sota = [95.02] * len(Auc)
+        sota = 95.02
 
     p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
     draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
@@ -493,6 +497,73 @@ def sensitivity(args):
     
     # mask, class_mean = get_class_mean4(args, fc_w)
     
+def find_threshold(args, features, p):
+    # print(features.flatten().shape)
+    print(f"\nTHRESHOLD at percentile {p} is:")
+    threshold = np.percentile(features.flatten(), p)
+    # threshold = np.percentile(features.mean(0), p)
+    print(threshold)
+    
+    return threshold
+
+def compute_threshold(args):
+    args.logdir='plot/threshold'
+    # logger = log.setup_logger(args)
+    args.score = 'my_score23'
+    save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    result_path = os.path.join(save_dir, f"{args.in_dataset}_{args.score}.csv")
+    if not os.path.exists(result_path):
+        fp = open(result_path,'a+')
+        result = []
+        result.append('threshold percentile')
+        result.append('threshold')
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
+
+
+    in_dataset = args.in_dataset
+
+    # loader_in_dict = get_dataloader_in(args, split=('val'))
+    # in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    loader_in_dict = get_dataloader_in(args, split=('train'))
+
+    in_loader, num_classes = loader_in_dict.train_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    Threshold_p = []
+    Threshold = []
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model.eval()
+
+    file_path = os.path.join(save_dir, f"{args.in_dataset}_feature.npy")
+    # features = get_features(args, model, in_loader)
+    # 
+    np.save(file_path, features)
+    features = np.load(file_path)
+    for p in [10, 60, 80, 85, 90, 95, 97, 99]:
+        threshold = find_threshold(args, features, p)
+        result_path = os.path.join(save_dir, f"{args.in_dataset}_{args.score}.csv")
+        fp = open(result_path,'a+')
+        result = []
+        result.append("{:}".format(p))
+        result.append("{:.2f}".format(threshold))
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
+
+        # print(f'p:{p}, threshold:{threshold}')
+        Threshold_p.append(p)
+        Threshold.append(threshold)
+
+
     
 
 def main(args):
@@ -533,8 +604,8 @@ def main(args):
         else:
             out_datasets = cifar_out_datasets
         for out_dataset in out_datasets:
-            if out_dataset == 'SVHN':
-                continue
+            # if out_dataset == 'SVHN':
+            #     continue
             loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
             out_loader = loader_out_dict.val_ood_loader
 
@@ -550,8 +621,8 @@ def main(args):
                 out_feature = out_class_mean[i]
                 fc = fc_w[i]
                 # np.random.rand(3)
-                x = np.random.binomial(1, p=0.4, size=1)
-                if x == 1:
+                x = np.random.binomial(1, p=0.8, size=1)
+                if x >= 0:
                     if np.linalg.norm(x=out_feature, ord=1) != 0:
                         draw_feature(args, in_feature, out_feature, fc, save_dir, out_dataset, i)
 
@@ -590,5 +661,6 @@ if __name__ == "__main__":
     # analysis_cos(args)
     # main(args)
     sensitivity(args)
+    # compute_threshold(args)
     # test_train(args)
     # test_mask(args)
