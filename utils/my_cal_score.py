@@ -1166,3 +1166,57 @@ def iterate_data_ablation(data_loader, model, temper, mask, threshold, class_mea
             confs.extend(conf.data.cpu().numpy())
 
     return np.array(confs)
+
+
+def iterate_data_reactodin(data_loader, model, epsilon, temper, threshold):
+    criterion = torch.nn.CrossEntropyLoss().cuda()
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        x = Variable(x.cuda(), requires_grad=True)
+        outputs = model.forward_threshold(x, threshold) 
+
+        maxIndexTemp = np.argmax(outputs.data.cpu().numpy(), axis=1)
+        outputs = outputs / temper
+
+        labels = Variable(torch.LongTensor(maxIndexTemp).cuda())
+        loss = criterion(outputs, labels)
+        loss.backward()
+
+        # Normalizing the gradient to binary in {0, 1}
+        gradient = torch.ge(x.grad.data, 0)
+        gradient = (gradient.float() - 0.5) * 2
+
+        # Adding small perturbations to images
+        tempInputs = torch.add(x.data, -epsilon, gradient)
+        # tempInputs = torch.add(x.data, gradient, -epsilon)
+        outputs = model.forward_threshold(Variable(tempInputs), threshold)
+        outputs = outputs / temper
+        # Calculating the confidence after adding perturbations
+        nnOutputs = outputs.data.cpu()
+        nnOutputs = nnOutputs.numpy()
+        nnOutputs = nnOutputs - np.max(nnOutputs, axis=1, keepdims=True)
+        nnOutputs = np.exp(nnOutputs) / np.sum(np.exp(nnOutputs), axis=1, keepdims=True)
+
+        confs.extend(np.max(nnOutputs, axis=1))
+        # if b % 100 == 0:
+        #     logger.info('{} batches processed'.format(b))
+        # debug
+        # if b > 500:
+        #    break
+
+    return np.array(confs)
+
+
+def iterate_data_reactmsp(data_loader, model, threshold):
+    m = torch.nn.Softmax(dim=-1).cuda()
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()            
+            # output = model(x)  
+            logits = model.forward_threshold(x, threshold) 
+
+            conf, _ = torch.max(m(logits), dim=-1)
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)

@@ -56,7 +56,7 @@ def get_argparser():
     # arguments for ODIN
     parser.add_argument('--temperature_odin', default=1000, type=int,
                         help='temperature scaling for odin')
-    parser.add_argument('--epsilon_odin', default=0.0014, type=float,
+    parser.add_argument('--epsilon_odin', default=0.004, type=float,
                         help='perturbation magnitude for odin') #0.0014 0.004 0.02
 
     # arguments for Energy

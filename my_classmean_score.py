@@ -632,6 +632,30 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_ablation(out_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
         analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'reactmsp':
+        p = 0
+        if args.p:
+            p = args.p
+
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_reactmsp(in_loader, model, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_reactmsp(out_loader, model, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'reactodin':
+        p = 0
+        if args.p:
+            p = args.p
+
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_reactodin(in_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_reactodin(out_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
@@ -1660,6 +1684,7 @@ if __name__ == "__main__":
     if args.in_dataset == "CIFAR-10":
         if args.model == 'densenet':
             args.threshold = 1.6
+            args.threshold = 1.5
             # args.threshold = 1.2
         elif args.model == 'resnet18':
             args.threshold = 0.8
@@ -1669,6 +1694,7 @@ if __name__ == "__main__":
     elif args.in_dataset == "CIFAR-100":
         if args.model == 'densenet':
             args.threshold = 1.6
+            args.threshold = 2.25
             # args.threshold = 1.9
         elif args.model == 'resnet18':
             args.threshold = 0.8

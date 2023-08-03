@@ -14,7 +14,7 @@ model_path="checkpoints/network"
 logdir='result'
 name='baseline'
 
-CUDA_VISIBLE_DEVICES=${GPU} python my_classmean_score.py \
+CUDA_VISIBLE_DEVICES=${GPU} python val_score.py \
 --model ${model} \
 --name ${name} \
 --batch 64 \

@@ -27,6 +27,8 @@ import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
+from scipy.interpolate import make_interp_spline
+from scipy.interpolate import interp1d
 from scipy.stats import norm
 from scipy.stats import laplace
 import torch.nn.functional as F
@@ -300,21 +302,22 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     out_sorted = out_class_mean[sorted_indices]
 
     # plot
+    plt.rcParams['font.size'] = 14
     plt.figure(figsize=(10, 6))
-    plt.ylim(0, 6)
+    # plt.ylim(0, 6)
     # plt.plot(v1_sorted, color='yellow', label='v1')
     # plt.plot(v2_sorted, color='green', label='v2')
 
     plt.bar(np.arange(len(in_sorted)), in_sorted, color='red', label='v1', alpha=0.7)
     plt.bar(np.arange(len(out_sorted)), out_sorted, color='green', label='v2', alpha=0.7)
 
-    plt.xlabel('Channel')
-    plt.ylabel('Activation')
+    plt.xlabel('Channel', fontsize=22)
+    plt.ylabel('Activation', fontsize=22)
 
     ax = plt.gca().twinx()
-
     plt.plot(fc[sorted_indices], color='darkblue', label='w', alpha=0.8)
-    plt.ylabel('Classifer weight')
+    plt.ylabel('Classifer weight', fontsize=22)
+
 
     # 同时显示左右两个图例
     lines, labels = plt.gca().get_legend_handles_labels()
@@ -322,13 +325,13 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     plt.legend(lines + lines2, labels + labels2)
 
     import matplotlib.patches as mpatches
-    id_patch = mpatches.Rectangle((0, 0), 1, 1, facecolor='red', edgecolor='black')
-    ood_patch = mpatches.Rectangle((0, 0), 1, 1, facecolor='green', edgecolor='black')
+    id_patch = mpatches.Rectangle((0, 0), 1, 1, facecolor='red', alpha=0.7, edgecolor='black')
+    ood_patch = mpatches.Rectangle((0, 0), 1, 1, facecolor='green', alpha=0.7, edgecolor='black')
 
     # 添加右上角的label
     plt.legend([id_patch, ood_patch], [f'ID:{args.in_dataset}', f'OOD:{out_dataset}'], loc='upper right')
-
-    plt.grid(True)
+    plt.tight_layout()
+    # plt.grid(True)
     save_dir = os.path.join(save_dir, args.in_dataset, out_dataset)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -338,33 +341,128 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
 def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
 
     # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
-    p = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+    # p = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
     # 以上内容是模拟数据 请忽略
     # 画图部分开始
-    plt.figure(figsize=(10, 6))
-
+    # plt.figure(figsize=(10, 6))
+    plt.rcParams['font.size'] = 14
     plt.plot(p, auc, 'o-', color='red', label='ours')
     # plt.plot(p, sota, '--', color='blue', label='LINe')
-    plt.axhline(y=sota, color='blue', linestyle='--', label='LINe')
-    plt.text(0, sota, f'{sota:.2f}', color='green', va='bottom', ha='right')
-    plt.xlabel('Pruning percentile')
-    plt.ylabel('AUROC')
+    plt.axhline(y=sota[0], color='blue', linestyle='--', label='LINe')
+    plt.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
+    plt.xlabel('Pruning percentile p', fontsize=22)
+    plt.ylabel('AUROC', fontsize=22)
 
-    # plt.plot(fpr95, color='red', label='FPR95')
-    # plt.ylabel('FPR95')
+    # fig, ax1 = plt.subplots()
+    # ax2 = ax1.twinx()
+    # ax1.plot(p, auc, 'o-', color='red', label='AUROC:Ours')
+    # # plt.plot(p, sota, '--', color='blue', label='LINe')
+    # ax1.axhline(y=sota[0], color='red', linestyle='--', label='AUROC:LINe')
+    # ax1.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
+    # ax1.set_xlabel('Pruning percentile p', fontsize=22)
+    # ax1.set_ylabel('AUROC', fontsize=22)
+    # # plt.plot(fpr95, color='red', label='FPR95')
+    # # plt.ylabel('FPR95')
 
-    # ax2.plot(p, fpr95, 's-', color='red', label='FPR95')
+    # ax2.plot(p, fpr95, 's-', color='blue', label='FPR95:Ours')
     # ax2.set_ylabel('FPR95')
-
+    # ax2.axhline(y=sota[1], color='blue', linestyle='--', label='FPR95:LINe')
+    # ax2.text(0, sota[1], f'{sota[1]:.2f}', color='green', va='top', ha='left')
+    # plt.yticks([20, 30, 40], ['20', '30', '40'])
     # plt.xlim(0, 1.0)
-    plt.xticks(p, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
+    # extra_tick = sota
+    # plt.gca().yaxis.set_ticks([extra_tick])
+    plt.xticks(p, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
 
-
+    ylim=(88, 93)
+    ylim=(96, 97.5)
+    # plt.ylim(ylim)
     # plt.title('Training and Validation Accuracy over Epochs')
     plt.legend(loc='lower right')
-    plt.grid(True)
-
+    # plt.grid(True)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    # filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}_zoom.pdf')
     filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}.pdf')
+    plt.savefig(filename)
+
+def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
+
+    # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+    # p = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+    # 以上内容是模拟数据 请忽略
+    # 画图部分开始
+    
+    plt.rcParams['font.size'] = 12
+    # plt.style.use('ggplot')
+    # plt.plot(p, auc, 'o-', color='red', label='ours')
+    # # plt.plot(p, sota, '--', color='blue', label='LINe')
+    # plt.axhline(y=sota[0], color='blue', linestyle='--', label='LINe')
+    # plt.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
+    # plt.xlabel('Pruning percentile p', fontsize=22)
+    # plt.ylabel('AUROC', fontsize=22)
+    # p_smooth = np.linspace(p.min(), p.max(), 8)  
+    p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0, 2.5])  
+
+    # 使用样条插值方法进行平滑
+    origin_auc = auc
+    origin_fpr95 = fpr95
+    origin_p = p
+    spl1 = make_interp_spline(p, auc)
+    auc = spl1(p_smooth)
+    # f = interp1d(origin_p, y_original, kind='linear')
+    # y_smooth = f(x_smooth)
+    spl2 = make_interp_spline(p, fpr95)
+    fpr95 = spl2(p_smooth)
+    p = p_smooth
+    print(auc,p)
+
+    # plt.figure(figsize=(20, 6))
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax2 = ax1.twinx()
+
+    
+    ax1.plot(p, auc, 'o-', color='red', label='AUROC:Ours')
+    # plt.plot(p, sota, '--', color='blue', label='LINe')
+    ax1.axhline(y=sota[0], color='red', linestyle='--', label='AUROC:LINe')
+    ax1.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
+    ax1.set_xlabel('Rectification threshold', fontsize=18)
+    ax1.set_ylabel('AUROC', fontsize=18)
+    # plt.plot(fpr95, color='red', label='FPR95')
+    # plt.ylabel('FPR95')
+    # ax1.scatter(origin_p, origin_auc, color='red')
+    ax2.plot(p, fpr95, 's-', color='blue', label='FPR95:Ours')
+    ax2.set_ylabel('FPR95', fontsize=18)
+    ax2.axhline(y=sota[1], color='blue', linestyle='--', label='FPR95:LINe')
+    ax2.text(max(p), sota[1], f'{sota[1]:.2f}', color='green', va='top', ha='center')
+
+
+    yticks1 = np.arange(93, 96, 0.5)
+    yticks2 = np.arange(19, 28, 1.5)
+
+    ax1.set_ylim(93, 96)
+    ax2.set_ylim(19, 28)
+
+    ax1.set_yticks(yticks1)
+    ax2.set_yticks(yticks2)
+    # plt.yticks([20, 30, 40], ['20', '30', '40'])
+    # plt.xlim(0, 1.0)
+    # extra_tick = sota
+    # plt.gca().yaxis.set_ticks([extra_tick])
+    # plt.xticks(p, [0.1, 0.5, 0.8, 1.0, 1.5, 2.5])
+
+    # ylim=(88, 93)
+    # ylim=(96, 97.5)
+    # plt.ylim(ylim)
+    # plt.title('Training and Validation Accuracy over Epochs')
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    # plt.grid(True)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    # filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}_zoom.pdf')
+    filename = os.path.join(save_dir, f'react_{args.in_dataset}_{args.score}.pdf')
     plt.savefig(filename)
 
 kwargs = {'num_workers': 2, 'pin_memory': True}
@@ -442,7 +540,8 @@ def sensitivity(args):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     filepath = os.path.join('sensitivity_result', args.name, args.model)
-    filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
+    # filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
+    filename = os.path.join(filepath, f"react_{args.in_dataset}_{args.score}.csv")
     data_array = []
     with open(filename) as csv_file:
         csv_reader = csv.reader(csv_file)
@@ -459,23 +558,27 @@ def sensitivity(args):
             fpr95 = float(data[3])
             Auc.append(auc)
             Fpr95.append(fpr95)
+    Auc.pop()
+    Fpr95.pop()
     Auc = np.array(Auc)
     Fpr95 = np.array(Fpr95)
-
+    print(Auc, Fpr95)
     if args.in_dataset == "CIFAR-10":
-        sota = [96.57] * len(Auc)
-        sota = 96.57
+        sota = [96.59] * len(Auc)
+        sota = [96.59, 16.95]
 
     elif args.in_dataset == "CIFAR-100":
-        sota = [88.71] * len(Auc)
-        sota = 88.71
+        sota = [88.68] * len(Auc)
+        sota = [88.68, 35.67]
             
     elif args.in_dataset == "imagenet":
         sota = [95.02] * len(Auc)
-        sota = 95.02
+        sota = [95.02, 20.70]
 
-    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
-    draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
+    # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+    # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    p = np.array([0.1, 0.5, 0.8, 1.0, 1.5, 2.5])
+    draw_react_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
     # args.logdir='sensitivity_result'
     # logger = log.setup_logger(args)
     # args.p = 80
