@@ -30,6 +30,8 @@ import pandas as pd
 from scipy.stats import norm
 from scipy.stats import laplace
 import torch.nn.functional as F
+envpath = '/home/2022/zhuohao/miniconda3/envs/python39/lib/python3.9/site-packages/cv2/qt/plugins/platforms'
+os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = envpath
 
 
 def get_features(args, model, dataloader, mask=None):
@@ -56,6 +58,10 @@ def get_features(args, model, dataloader, mask=None):
 
 def extact_mean_std(args, model):
     for key, v in model.state_dict().items():
+        # print(key)
+        if key == 'classifier.1.weight':
+            fc_w = v
+            print(v.shape)
         if key == 'fc.weight':
             fc_w = v
             print(v.shape)
@@ -96,7 +102,7 @@ def get_class_mean2(args, fc_w):
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
     print(class_mean.shape, fc_w.shape)
-    # class_mean = np.squeeze(class_mean)
+    class_mean = np.squeeze(class_mean)
 
     # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
     p = 0
@@ -128,7 +134,7 @@ def get_class_mean3(args, fc_w):
     if args.p:
         p = args.p
     
-    # fc_w = fc_w / fc_w.mean(axis=1)[:, None]
+    fc_w = fc_w / fc_w.sum(axis=1)[:, None]
     fc_w = np.exp(fc_w)
     thresh = np.percentile(fc_w, p, axis=1)
     # print(thresh.shape, thresh)
@@ -138,6 +144,31 @@ def get_class_mean3(args, fc_w):
         mask[i] = np.where(fc_w[i] >= thresh[i],1,0) * fc_w[i]
         # print(mask[i])
         class_mean[i,:] = class_mean[i,:] * mask[i,:]
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
+
+def get_class_mean4(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
+    class_mean = np.squeeze(class_mean)
+
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    p = 0
+    if args.p:
+        p = args.p
+    thresh = np.percentile(fc_w, p, axis=1)
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(fc_w[i] >= thresh[i],1,0)
+        # class_mean[i,:] = class_mean[i,:] * mask[i,:]
 
     # mask = np.where(class_mean>thresh,1,0)
 
@@ -276,17 +307,6 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
             in_scores = iterate_data_ashs(in_loader, model, args.temperature_energy, p)
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_ashs(out_loader, model, args.temperature_energy, p)
-        analysis_score(args, in_scores, out_scores, out_dataset)
-
-    elif args.score == 'SHE':
-        p = 0
-        if args.p:
-            p = args.p
-        if in_scores is None: 
-            logger.info("Processing in-distribution data...")
-            in_scores = iterate_data_SHE(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-        logger.info("Processing out-of-distribution data...")
-        out_scores = iterate_data_SHE(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
     elif args.score == 'my_score':
@@ -503,25 +523,160 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_my20(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
+    # elif args.score == 'myodin':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_myodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_myodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'mymsp':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_mymsp(in_loader, model, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_mymsp(out_loader, model, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'myLINE':
+       
+    #     args.threshold = 0.8  #0.8
+    #     p = 0
+    #     args.p = 0
+
+    #     info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
+    #     model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
+    #     model.eval()
+    #     fc_w = extact_mean_std(args, model)
+    #     mask, class_mean = get_class_mean2(args, fc_w)
+    #     # mask, class_mean = get_class_mean(args)
+    #     class_mean = class_mean.cuda()
+    #     # class_mean = class_mean.clip(max=args.threshold)
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_myLINE(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_myLINE(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'simodin':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_simodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_simodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'my_score21':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_my21(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_my21(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'my_score22':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_my22(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_my22(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    elif args.score == 'my_score23':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my23(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my23(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'cosine':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_cosine(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_cosine(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+
+    # elif args.score == 'ablation':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_ablation(in_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_ablation(out_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    # elif args.score == 'reactmsp':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_reactmsp(in_loader, model, args.threshold)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_reactmsp(out_loader, model, args.threshold)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    
+    # elif args.score == 'reactodin':
+    #     p = 0
+    #     if args.p:
+    #         p = args.p
+
+    #     if in_scores is None: 
+    #         logger.info("Processing in-distribution data...")
+    #         in_scores = iterate_data_reactodin(in_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+    #     logger.info("Processing out-of-distribution data...")
+    #     out_scores = iterate_data_reactodin(out_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+    #     analysis_score(args, in_scores, out_scores, out_dataset)
 
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
 
     auroc, aupr_in, aupr_out, fpr95 = get_measures(in_examples, out_examples)
-    if args.in_dataset == "imagenet":
-        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
-        fp = open(result_path,'a+')
-        result = []
+    auroc, aupr_in, aupr_out, fpr95 = auroc*100, aupr_in*100, aupr_out*100, fpr95*100
 
-        result.append(f'p: {args.p}')
-        result.append(out_dataset)
-        result.append("{:.4f}".format(auroc))
-        result.append("{:.4f}".format(aupr_in))
-        result.append("{:.4f}".format(aupr_out))
-        result.append("{:.4f}".format(fpr95))
-        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-        context.writerow(result)
-        fp.close()
+    # if args.in_dataset == "imagenet":
+    #     result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    #     fp = open(result_path,'a+')
+    #     result = []
+
+    #     result.append(f'p: {args.p}')
+    #     result.append(out_dataset)
+    #     result.append("{:.4f}".format(auroc))
+    #     result.append("{:.4f}".format(aupr_in))
+    #     result.append("{:.4f}".format(aupr_out))
+    #     result.append("{:.4f}".format(fpr95))
+    #     context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+    #     context.writerow(result)
+    #     fp.close()
 
     logger.info('============Results for {}============'.format(args.score))
     logger.info('=======in dataset: {}; ood dataset: {}============'.format(args.in_dataset, out_dataset))
@@ -750,6 +905,7 @@ def analysis_score(args, in_examples, out_examples, out_dataset):
     plt.xlabel("score")
     ax.legend(loc="upper right")
     # plt.xlim(0, m * 10)
+    plt.title('{}:p={}'.format(args.score ,args.p/100))
     plt.savefig(save_pic_filename,dpi=600)
     
     plt.close()
@@ -1028,13 +1184,6 @@ def analysis_feature(args):
         out_dataset = args.out_dataset
         loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
         out_loader = loader_out_dict.val_ood_loader
-
-        in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
-        start_time = time.time()
-        out_right, out_sum = analysis_act_num(model, out_loader, args, mask)
-        in_class_prun, in_max_prun = analysis_act_value(model, out_loader, args, mask)
-        end_time = time.time()
-
     
     else:
         out_datasets = []
@@ -1115,19 +1264,16 @@ def analysis_cos(args):
             logger.info(f'out_data: {out_dataset}, cos_sim: {out_cos_sim.mean(0)}')
             end_time = time.time()
 
-
-def main(args):
+def analysis_sensitivity(args):
+    args.logdir='sensitivity_result'
     logger = log.setup_logger(args)
-
-    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    result_path = os.path.join('sensitivity_result', args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
     if not os.path.exists(result_path):
         fp = open(result_path,'a+')
         result = []
         result.append('model')
         result.append('out-dataset')
         result.append('AUROC')
-        result.append('AUPR (In)')
-        result.append('AUPR (Out)')
         result.append('FPR95')
         context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
         context.writerow(result)
@@ -1153,10 +1299,227 @@ def main(args):
     model.eval()
 
     fc_w = extact_mean_std(args, model)
-    mask, class_mean = get_class_mean3(args, fc_w)
+    # [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
+    for p in [99]:
+        args.p = p
+        mask, class_mean = get_class_mean4(args, fc_w)
+        class_mean = class_mean.cuda()
+        in_scores=None
+        if args.out_dataset is not None:
+            out_dataset = args.out_dataset
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+
+
+            start_time = time.time()
+            run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+            print(in_scores)
+            end_time = time.time()
+
+            logger.info("Total running time: {}".format(end_time - start_time))
+        
+        else:  
+            out_datasets = []
+            AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+            if in_dataset == "imagenet":
+                out_datasets = imagenet_out_datasets
+            else:
+                out_datasets = cifar_out_datasets
+            for out_dataset in out_datasets:
+                loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+                out_loader = loader_out_dict.val_ood_loader
+
+                in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+                logger.info(f"Using an in-distribution set with {len(in_set)} images.")
+                logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
+
+
+                start_time = time.time()
+                auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+                end_time = time.time()
+                logger.info("Total running time: {}".format(end_time - start_time))
+
+                AUroc.append(auroc)
+                AUPR_in.append(aupr_in)
+                AUPR_out.append(aupr_out)
+                Fpr95.append(fpr95)
+            avg_auroc = sum(AUroc) / len(AUroc)
+            avg_aupr_in = sum(AUPR_in) / len(AUPR_in)
+            avg_aupr_out = sum(AUPR_out) / len(AUPR_out)
+            avg_fpr95 = sum(Fpr95) / len(Fpr95)
+
+            result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+            fp = open(result_path,'a+')
+            result = []
+
+            result.append(f'p: {args.p}/threshold{args.threshold}')
+            result.append('Average')
+            result.append("{:.2f}".format(avg_auroc))
+            result.append("{:.2f}".format(avg_fpr95))
+            context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+            context.writerow(result)
+            fp.close()
+
+def analysis_react_sensitivity(args):
+    args.logdir='sensitivity_result'
+    logger = log.setup_logger(args)
+    result_path = os.path.join('sensitivity_result', args.name, args.model, f"react_{args.in_dataset}_{args.score}.csv")
+    if not os.path.exists(result_path):
+        fp = open(result_path,'a+')
+        result = []
+        result.append('model')
+        result.append('out-dataset')
+        result.append('FPR95')
+        result.append('AUROC')
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
+
+    result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.txt")
+    if not os.path.exists(result_path):
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write('method  ')
+            f.write('FPR95  ')
+            f.write('AUROC\n')
+
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+    in_scores=None
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model.eval()
+    
+    fc_w = extact_mean_std(args, model)
+    mask, class_mean = get_class_mean4(args, fc_w)
+    class_mean = class_mean.cuda()
+    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.5, 1e5]:
+        args.threshold = threshold
+        
+        in_scores=None
+        if args.out_dataset is not None:
+            out_dataset = args.out_dataset
+            loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+            out_loader = loader_out_dict.val_ood_loader
+
+            in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+
+
+            start_time = time.time()
+            run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+            print(in_scores)
+            end_time = time.time()
+
+            logger.info("Total running time: {}".format(end_time - start_time))
+        
+        else:  
+            out_datasets = []
+            AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
+            if in_dataset == "imagenet":
+                out_datasets = imagenet_out_datasets
+            else:
+                out_datasets = cifar_out_datasets
+            for out_dataset in out_datasets:
+                loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
+                out_loader = loader_out_dict.val_ood_loader
+
+                in_set, out_set = loader_in_dict.val_dataset, loader_out_dict.val_dataset
+                logger.info(f"Using an in-distribution set with {len(in_set)} images.")
+                logger.info(f"Using an out-of-distribution set with {len(out_set)} images.")
+
+
+                start_time = time.time()
+                auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset=out_dataset, mask=mask, class_mean=class_mean, in_scores=in_scores)
+                end_time = time.time()
+                logger.info("Total running time: {}".format(end_time - start_time))
+
+                AUroc.append(auroc)
+                AUPR_in.append(aupr_in)
+                AUPR_out.append(aupr_out)
+                Fpr95.append(fpr95)
+            avg_auroc = sum(AUroc) / len(AUroc)
+            avg_aupr_in = sum(AUPR_in) / len(AUPR_in)
+            avg_aupr_out = sum(AUPR_out) / len(AUPR_out)
+            avg_fpr95 = sum(Fpr95) / len(Fpr95)
+
+            result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.csv")
+            fp = open(result_path,'a+')
+            result = []
+
+            result.append(f'p: {args.p}/threshold{args.threshold}')
+            result.append('Average')
+            result.append("{:.2f}".format(avg_fpr95))
+            result.append("{:.2f}".format(avg_auroc))
+            context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+            context.writerow(result)
+            fp.close()
+
+            result_path = os.path.join(args.logdir, args.name, args.model, f"react_{args.in_dataset}_{args.score}.txt")
+            with open(result_path, 'a+', encoding='utf-8') as f:
+                f.write("threshold={:.2f} & ".format(args.threshold))
+                f.write("{:.2f} & ".format(avg_fpr95))
+                f.write("{:.2f}\n".format(avg_auroc))
+
+def main(args):
+    logger = log.setup_logger(args)
+
+    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_{args.score}.csv")
+    if not os.path.exists(result_path):
+        fp = open(result_path,'a+')
+        result = []
+        result.append('model')
+        result.append('out-dataset')
+        result.append('AUROC')
+        result.append('AUPR (In)')
+        result.append('AUPR (Out)')
+        result.append('FPR95')
+        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+        context.writerow(result)
+        fp.close()
+
+    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}.txt")
+    if not os.path.exists(result_path):
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write('method  ')
+            f.write('FPR95  ')
+            f.write('AUROC\n')
+
+    in_dataset = args.in_dataset
+
+    in_save_dir = os.path.join(args.logdir, args.name, args.model)
+    if not os.path.exists(in_save_dir):
+        os.makedirs(in_save_dir)
+
+    loader_in_dict = get_dataloader_in(args, split=('val'))
+    in_loader, num_classes = loader_in_dict.val_loader, loader_in_dict.num_classes
+    args.num_classes = num_classes
+    in_scores=None
+
+    load_ckpt = False
+    if args.model_path != None:
+        load_ckpt = True
+
+    model = get_model(args, num_classes, load_ckpt=load_ckpt)
+    model.eval()
+
+    fc_w = extact_mean_std(args, model)
+    mask, class_mean = get_class_mean4(args, fc_w)
+    # mask, class_mean = get_class_mean2(args, fc_w)
     # mask, class_mean = get_class_mean(args)
     class_mean = class_mean.cuda()
-    class_mean = class_mean.clip(max=args.threshold)
+    # class_mean = class_mean.clip(max=args.threshold)
     if args.out_dataset is not None:
         out_dataset = args.out_dataset
         loader_out_dict = get_dataloader_out(args, (None, out_dataset), split=('val'))
@@ -1207,7 +1570,7 @@ def main(args):
         fp = open(result_path,'a+')
         result = []
 
-        result.append(f'p: {args.p}/threshold{args.threshold}')
+        result.append(f'p: {args.p}/threshold{args.threshold}/cos:{args.cos}')
         result.append('Average')
         result.append("{:.4f}".format(avg_auroc))
         result.append("{:.4f}".format(avg_aupr_in))
@@ -1216,6 +1579,17 @@ def main(args):
         context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
         context.writerow(result)
         fp.close()
+
+        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}.txt")
+        with open(result_path, 'a+', encoding='utf-8') as f:
+            f.write("{} & ".format(args.score))
+            for i in range(len(AUroc)):
+                fpr95 = Fpr95[i]
+                auroc = AUroc[i]
+                f.write("{:.2f} & ".format(fpr95))
+                f.write("{:.2f} & ".format(auroc))
+            f.write("{:.2f} & ".format(avg_fpr95))
+            f.write("{:.2f}\n".format(avg_auroc))
 
         logger.info('============Results for {}============'.format(args.score))
         logger.info('=======in dataset: {}; ood dataset: Average============'.format(args.in_dataset))
@@ -1306,19 +1680,42 @@ if __name__ == "__main__":
     parser = get_argparser()
 
     args = parser.parse_args()
+    
     if args.in_dataset == "CIFAR-10":
-        args.threshold = 1.5
+        if args.model == 'densenet':
+            args.threshold = 1.6
+            # args.threshold = 1.5
+            # args.threshold = 1.2
+        elif args.model == 'resnet18':
+            args.threshold = 1.0
+        args.p_a = 90
+        args.p_w = 90
 
     elif args.in_dataset == "CIFAR-100":
-        args.threshold = 1.5
-
+        if args.model == 'densenet':
+            args.threshold = 1.6
+            # args.threshold = 2.25
+            # args.threshold = 1.9
+        elif args.model == 'resnet18':
+            args.threshold = 1.0
+        args.p_a = 10
+        args.p_w = 90
+            
     elif args.in_dataset == "imagenet":
-        args.threshold = 1.0
+        args.threshold = 0.8
+        # args.threshold = 0.84
+        if args.model == 'mobilenet':
+            args.threshold = 0.2
+        args.p_a = 10
+        args.p_w = 10
+    
     # args.threshold = 1e5
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)
     # analysis_cos(args)
     main(args)
+    # analysis_react_sensitivity(args)
+    # analysis_sensitivity(args)
     # test_train(args)
     # test_mask(args)
