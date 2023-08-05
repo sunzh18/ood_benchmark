@@ -6,4 +6,7 @@ analysis_feature/
 draw_analysis/
 __pycache__/
 cache/
+gradcam/
+sensitivity_result/
+plot/
 *.pyc

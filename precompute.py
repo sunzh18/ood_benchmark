@@ -12,7 +12,7 @@ import os
 
 from sklearn.linear_model import LogisticRegressionCV
 from torch.autograd import Variable
-from utils.mahalanobis_lib import sample_estimator
+from utils.mahalanobis_lib import sample_estimator, tune_mahalanobis_hyperparams
 from utils.data_loader import get_dataloader_in, get_dataloader_out, cifar_out_datasets, imagenet_out_datasets
 from utils.model_loader import get_model
 
@@ -53,7 +53,24 @@ def get_features(args, model, dataloader):
 
     return features
 
+def get_mahalanobis(args, model, num_classes, train_loader, val_loader):
+    sample_mean, precision, best_regressor, best_magnitude \
+        = tune_mahalanobis_hyperparams(args, model, num_classes, train_loader, val_loader)
+    
+    save_dir = os.path.join('cache', 'mahalanobis', args.name)
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # np.save(os.path.join(save_dir, f'{args.in_dataset}_{args.model}_results'),
+    #         np.array([sample_mean.cpu(), precision.cpu(), best_regressor.coef_, best_regressor.intercept_, best_magnitude]))
+        
+    np.save(os.path.join(save_dir, f'{args.in_dataset}_{args.model}_results'),
+            np.array([best_regressor.coef_, best_regressor.intercept_, best_magnitude]))
+            
+
 def extact_mean_std(args, model):
+    
     for key, v in model.state_dict().items():
         # resnet
         if key == 'layer4.1.bn2.weight':
@@ -62,8 +79,15 @@ def extact_mean_std(args, model):
         if key == 'layer4.1.bn2.bias':
             # print(f'mean: {v}')
             mean = v
+        
+        if key == 'layer4.2.bn3.weight':
+            # print(f'var: {v}')
+            std = v
+        if key == 'layer4.2.bn3.bias':
+            # print(f'mean: {v}')
+            mean = v
 
-        # print(f'{key}')
+        print(f'{key}')
         if key == 'fc.weight':
             fc_w = v
             # print(v.shape)
@@ -77,13 +101,13 @@ def extact_mean_std(args, model):
             # print(f'mean: {v}')
             mean = v
 
-    # file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
-    # if not os.path.isdir(file_folder):
-    #     os.makedirs(file_folder)
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    if not os.path.isdir(file_folder):
+        os.makedirs(file_folder)
     
-    # torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
-    # torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
-    # print(mean)
+    torch.save(mean, f'{file_folder}/{args.model}_features_mean.pt')
+    torch.save(std, f'{file_folder}/{args.model}_features_std.pt')
+    # print(mean.shape)
     # print(std)
     return fc_w.cpu().numpy()
 
@@ -145,9 +169,13 @@ def get_class_mean_precision(args, model, num_classes, train_loader):
     for mean in class_mean:
         print(mean.shape)
         print(mean)
-    class_mean = np.array([item.cpu().detach().numpy() for item in class_mean])
-    precision = np.array([item.cpu().detach().numpy() for item in precision])
-    print(class_mean.shape, precision.shape)
+    # class_mean = np.array([item.cpu().detach().numpy() for item in class_mean])
+    # precision = np.array([item.cpu().detach().numpy() for item in precision])
+
+    # class_mean = np.squeeze(class_mean)
+    # precision = np.squeeze(precision)
+
+    # print(class_mean.shape, precision.shape)
 
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     if not os.path.isdir(file_folder):
@@ -156,6 +184,7 @@ def get_class_mean_precision(args, model, num_classes, train_loader):
     # features = get_features(args, model, train_dataloader)
 
     np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    np.save(f"{file_folder}/{args.model}_precision.npy", precision)
 
 def get_LINE_info(args, model, num_classes, trainset, featdim):
     file_folder = f'cache/{args.name}'
@@ -280,6 +309,8 @@ def main(args):
         # Data loading code
         trainset = torchvision.datasets.CIFAR10(root=data_path, train=True, download=False, transform=transform_test)
         train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
+        valset = torchvision.datasets.CIFAR10(root=data_path, train=False, download=False, transform=transform_test)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=True, **kwargs)
 
         num_classes = 10
 
@@ -288,6 +319,8 @@ def main(args):
         # Data loading code
         trainset = torchvision.datasets.CIFAR100(root=data_path, train=True, download=False, transform=transform_test)
         train_dataloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch, shuffle=False, **kwargs)
+        valset = torchvision.datasets.CIFAR100(root=data_path, train=False, download=False, transform=transform_test)
+        val_dataloader = torch.utils.data.DataLoader(valset, batch_size=args.batch, shuffle=False, **kwargs)
 
         num_classes = 100
 
@@ -321,7 +354,7 @@ def main(args):
     # model.load_state_dict(checkpoint['state_dict'])
     model = get_model(args, num_classes, load_ckpt=load_ckpt)
     model.eval()
-
+    get_mahalanobis(args, model, num_classes, train_dataloader, val_dataloader)
     # fc_w = extact_mean_std(args, model)
 
     # get_class_mean(args, fc_w)
@@ -352,7 +385,7 @@ def main(args):
     # print(info)
 
 
-    # get_class_mean_precision(args, model, num_classes, train_dataloader)
+    # # get_class_mean_precision(args, model, num_classes, train_dataloader)
 
     if args.model == 'resnet18':
         featdim = 512

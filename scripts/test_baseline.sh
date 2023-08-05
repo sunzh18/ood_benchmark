@@ -3,7 +3,6 @@ in_dataset=$1
 model=$2
 SCORE=$3
 GPU=$4
-# OUT_DATA=$5
 ood_data="/data15/data15_5/Public/Datasets"
 
 out_dataset="SUN"

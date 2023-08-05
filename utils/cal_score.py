@@ -46,6 +46,7 @@ def iterate_data_odin(data_loader, model, epsilon, temper, logger):
 
         # Adding small perturbations to images
         tempInputs = torch.add(x.data, -epsilon, gradient)
+        # tempInputs = torch.add(x.data, gradient, -epsilon)
         outputs = model(Variable(tempInputs))
         outputs = outputs / temper
         # Calculating the confidence after adding perturbations
@@ -100,6 +101,7 @@ def iterate_data_LINE(data_loader, model, temper, threshold):
             confs.extend(conf.data.cpu().numpy())
     return np.array(confs)
 
+
 def iterate_data_gradnorm(data_loader, model, temperature, num_classes):
     confs = []
     logsoftmax = torch.nn.LogSoftmax(dim=-1).cuda()
@@ -134,7 +136,11 @@ def iterate_data_mahalanobis(data_loader, model, num_classes, sample_mean, preci
         # if b % 10 == 0:
         #     logger.info('{} batches processed'.format(b))
         x = x.cuda()
-
+        # feature = model.forward_features(x)
+        # for f in feature:
+        #     scores = -np.array((((f - sample_mean) @ precision) * (f - sample_mean)).sum(axis=-1).min().cpu().item())
+        #     # print(scores)
+        #     confs.append(scores)
         Mahalanobis_scores = get_Mahalanobis_score(x, model, num_classes, sample_mean, precision, num_output, magnitude)
         scores = -regressor.predict_proba(Mahalanobis_scores)[:, 1]
         confs.extend(scores)

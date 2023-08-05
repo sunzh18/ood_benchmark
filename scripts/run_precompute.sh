@@ -17,7 +17,7 @@ name='baseline'
 CUDA_VISIBLE_DEVICES=${GPU} python precompute.py \
 --model ${model} \
 --name ${name} \
---batch 32 \
+--batch 16 \
 --in_dataset ${in_dataset} \
 --logdir result \
 --model_path ${model_path} \

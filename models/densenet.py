@@ -156,8 +156,9 @@ class DenseNet3(nn.Module):
         out = self.fc(out)
         return out
 
-    def forward_pool_feat(self, feat):
+    def forward_pool_feat(self, feat, threshold=1e10):
         out = F.avg_pool2d(feat, 8)
+        out = out.clip(max=threshold)
         out = out.view(-1, self.in_planes)
         out = self.fc(out)
         return out
@@ -264,6 +265,15 @@ class DenseNet3(nn.Module):
         out = out.view(-1, self.in_planes)
         return self.fc(out), penultimate
     
+    def forward_LINE(self, x, threshold=1e10):
+        out = self.features(x)
+        out = F.avg_pool2d(out, 8)
+        out = out.clip(max=threshold)
+        out = out.view(-1, self.in_planes)
+        feature = out
+        out, feat = self.fc(out)
+        return out, feature
+
     def _forward(self, x):
         self.activations = []
         self.gradients = []

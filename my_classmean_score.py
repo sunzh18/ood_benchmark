@@ -127,6 +127,60 @@ def get_class_mean3(args, fc_w):
     file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
     class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
     print(class_mean.shape, fc_w.shape)
+    class_mean = np.squeeze(class_mean)
+
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    p = 0
+    if args.p:
+        p = args.p
+    
+    fc_w = fc_w / fc_w.sum(axis=1)[:, None]
+    fc_w = np.exp(fc_w)
+    thresh = np.percentile(fc_w, p, axis=1)
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(fc_w[i] >= thresh[i],1,0) * fc_w[i]
+        # print(mask[i])
+        class_mean[i,:] = class_mean[i,:] * mask[i,:]
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
+
+def get_class_mean4(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
+    class_mean = np.squeeze(class_mean)
+
+    # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
+    p = 0
+    if args.p:
+        p = args.p
+    thresh = np.percentile(fc_w, p, axis=1)
+    # print(thresh.shape, thresh)
+    mask = np.zeros_like(fc_w)
+    print(mask.shape)
+    for i in range(mask.shape[0]):
+        mask[i] = np.where(fc_w[i] >= thresh[i],1,0)
+        # class_mean[i,:] = class_mean[i,:] * mask[i,:]
+
+    # mask = np.where(class_mean>thresh,1,0)
+
+    # print(mask)
+    index = np.argwhere(mask == 1)
+    mask = torch.tensor(mask)
+    return mask, torch.tensor(class_mean)
+
+def get_class_mean3(args, fc_w):
+    file_folder = f'checkpoints/feature/{args.name}/{args.in_dataset}'
+    class_mean = np.load(f"{file_folder}/{args.model}_class_mean.npy")
+    print(class_mean.shape, fc_w.shape)
     # class_mean = np.squeeze(class_mean)
 
     # np.save(f"{file_folder}/{args.model}_class_mean.npy", class_mean)
@@ -523,81 +577,81 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_my20(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'myodin':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_myodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_myodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'myodin':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_myodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_myodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'mymsp':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_mymsp(in_loader, model, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_mymsp(out_loader, model, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'mymsp':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_mymsp(in_loader, model, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_mymsp(out_loader, model, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'myLINE':
+    elif args.score == 'myLINE':
        
-    #     args.threshold = 0.8  #0.8
-    #     p = 0
-    #     args.p = 0
+        args.threshold = 0.8  #0.8
+        p = 0
+        args.p = 0
 
-    #     info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
-    #     model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
-    #     model.eval()
-    #     fc_w = extact_mean_std(args, model)
-    #     mask, class_mean = get_class_mean2(args, fc_w)
-    #     # mask, class_mean = get_class_mean(args)
-    #     class_mean = class_mean.cuda()
-    #     # class_mean = class_mean.clip(max=args.threshold)
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_myLINE(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_myLINE(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+        info = np.load(f"cache/{args.name}/{args.in_dataset}_{args.model}_meanshap_class.npy")
+        model = get_model(args, num_classes, load_ckpt=True, info=info, LU=True)
+        model.eval()
+        fc_w = extact_mean_std(args, model)
+        mask, class_mean = get_class_mean2(args, fc_w)
+        # mask, class_mean = get_class_mean(args)
+        class_mean = class_mean.cuda()
+        # class_mean = class_mean.clip(max=args.threshold)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_myLINE(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_myLINE(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'simodin':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_simodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_simodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'simodin':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_simodin(in_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_simodin(out_loader, model, args.epsilon_odin, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'my_score21':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_my21(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_my21(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'my_score21':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my21(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my21(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'my_score22':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_my22(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_my22(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'my_score22':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my22(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my22(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
     
     elif args.score == 'my_score23':
         p = 0
@@ -610,52 +664,52 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         out_scores = iterate_data_my23(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
         analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'cosine':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_cosine(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_cosine(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+    elif args.score == 'cosine':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_cosine(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_cosine(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
-    # elif args.score == 'ablation':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
+    elif args.score == 'ablation':
+        p = 0
+        if args.p:
+            p = args.p
 
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_ablation(in_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_ablation(out_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_ablation(in_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_ablation(out_loader, model, args.temperature_energy, mask, args.threshold, class_mean, args.cos)
+        analysis_score(args, in_scores, out_scores, out_dataset)
     
-    # elif args.score == 'reactmsp':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
+    elif args.score == 'reactmsp':
+        p = 0
+        if args.p:
+            p = args.p
 
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_reactmsp(in_loader, model, args.threshold)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_reactmsp(out_loader, model, args.threshold)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_reactmsp(in_loader, model, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_reactmsp(out_loader, model, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
     
-    # elif args.score == 'reactodin':
-    #     p = 0
-    #     if args.p:
-    #         p = args.p
+    elif args.score == 'reactodin':
+        p = 0
+        if args.p:
+            p = args.p
 
-    #     if in_scores is None: 
-    #         logger.info("Processing in-distribution data...")
-    #         in_scores = iterate_data_reactodin(in_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
-    #     logger.info("Processing out-of-distribution data...")
-    #     out_scores = iterate_data_reactodin(out_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
-    #     analysis_score(args, in_scores, out_scores, out_dataset)
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_reactodin(in_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_reactodin(out_loader, model, args.epsilon_odin, args.temperature_odin, args.threshold)
+        analysis_score(args, in_scores, out_scores, out_dataset)
 
     in_examples = in_scores.reshape((-1, 1))
     out_examples = out_scores.reshape((-1, 1))
@@ -1405,7 +1459,7 @@ def analysis_react_sensitivity(args):
     fc_w = extact_mean_std(args, model)
     mask, class_mean = get_class_mean4(args, fc_w)
     class_mean = class_mean.cuda()
-    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.5, 1e5]:
+    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.25, 1e5]:
         args.threshold = threshold
         
         in_scores=None
@@ -1684,20 +1738,20 @@ if __name__ == "__main__":
     if args.in_dataset == "CIFAR-10":
         if args.model == 'densenet':
             args.threshold = 1.6
-            # args.threshold = 1.5
+            args.threshold = 1.5
             # args.threshold = 1.2
         elif args.model == 'resnet18':
-            args.threshold = 1.0
+            args.threshold = 0.8
         args.p_a = 90
         args.p_w = 90
 
     elif args.in_dataset == "CIFAR-100":
         if args.model == 'densenet':
             args.threshold = 1.6
-            # args.threshold = 2.25
+            args.threshold = 2.25
             # args.threshold = 1.9
         elif args.model == 'resnet18':
-            args.threshold = 1.0
+            args.threshold = 0.8
         args.p_a = 10
         args.p_w = 90
             

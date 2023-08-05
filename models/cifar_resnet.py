@@ -349,6 +349,13 @@ class ResNetCifar(AbstractResNet):
         out = self.fc(feat)
         return out
 
+    def forward_LINE(self, x, threshold=1e10):
+        feat = self.features(x)
+        feat = self.avgpool(feat)
+        feat = feat.clip(max=threshold)
+        feat = feat.view(feat.size(0), -1)
+        out, feat = self.fc(feat)
+        return out, feat
     
     def forward_threshold(self, x, threshold=1e10):
         x = self.features(x)
@@ -377,17 +384,17 @@ class ResNetCifar(AbstractResNet):
         return y, out_list
 
     def intermediate_forward(self, x, layer_index=4):
-    # if layer_index >= 0:
-        # out = self.maxpool(self.relu(self.bn1(self.conv1(x))))
-        out = self.relu(self.bn1(self.conv1(x)))
-    # if layer_index >= 1:
-        out = self.layer1(out)
-    # if layer_index >= 2:
-        out = self.layer2(out)
-    # if layer_index >= 3:
-        out = self.layer3(out)
-    # if layer_index >= 4:
-        out = self.layer4(out)
+        if layer_index >= 0:
+            # out = self.maxpool(self.relu(self.bn1(self.conv1(x))))
+            out = self.relu(self.bn1(self.conv1(x)))
+        if layer_index >= 1:
+            out = self.layer1(out)
+        if layer_index >= 2:
+            out = self.layer2(out)
+        if layer_index >= 3:
+            out = self.layer3(out)
+        if layer_index >= 4:
+            out = self.layer4(out)
         # out = out.clip(max=1.0)
         return out
 

@@ -51,12 +51,13 @@ def get_argparser():
     parser.add_argument('--bats', default=0, type=int, help='Using BATS to boost the performance or not.')
     parser.add_argument('--p-w', default=10, type= int, help='weight sparsity level')
     parser.add_argument('--p-a', default=10, type= int, help='activation sparsity level')
+    parser.add_argument("--cos", default=0, type=int, help="use cosine similarity")  
 
     # arguments for ODIN
     parser.add_argument('--temperature_odin', default=1000, type=int,
                         help='temperature scaling for odin')
-    parser.add_argument('--epsilon_odin', default=0.0014, type=float,
-                        help='perturbation magnitude for odin') #0.004
+    parser.add_argument('--epsilon_odin', default=0.004, type=float,
+                        help='perturbation magnitude for odin') #0.0014 0.004 0.02
 
     # arguments for Energy
     parser.add_argument('--temperature_energy', default=1, type=int,

@@ -2,27 +2,26 @@
 # in_dataset=$1
 in_dataset=$1
 model=$2
-SCORE=$3
-p=$4
-# cos=$5
+# SCORE=$2
+# BATS=$3
 
-GPU=$5
+GPU=$3
 out_dataset="SUN"
 # model_path="checkpoints/network/resnet18_cifar10.pth"
 model_path="checkpoints/network"
-# logdir='analysis_feature/prun_num'
-logdir='result'
+
+# name='KD_teacher_init'
+# name='KD_random_init'
 name='baseline'
 
-CUDA_VISIBLE_DEVICES=${GPU} python my_classmean_score.py \
+CUDA_VISIBLE_DEVICES=${GPU} python plot_result.py \
 --model ${model} \
 --name ${name} \
---batch 64 \
+--batch 16 \
 --in_dataset ${in_dataset} \
---logdir ${logdir} \
+--logdir result \
 --model_path ${model_path} \
---score ${SCORE} \
---p ${p}    \
-# --cos ${cos} 
+# --score ${SCORE} \
+# --bats ${BATS} 
 
 # --out_dataset ${OUT_DATA} \
