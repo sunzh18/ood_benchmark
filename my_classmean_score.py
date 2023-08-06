@@ -1354,7 +1354,7 @@ def analysis_sensitivity(args):
 
     fc_w = extact_mean_std(args, model)
     # [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
-    for p in [99]:
+    for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]:
         args.p = p
         mask, class_mean = get_class_mean4(args, fc_w)
         class_mean = class_mean.cuda()
@@ -1768,8 +1768,8 @@ if __name__ == "__main__":
     # analysis_confidence(args)
     # analysis_feature(args)
     # analysis_cos(args)
-    main(args)
+    # main(args)
     # analysis_react_sensitivity(args)
-    # analysis_sensitivity(args)
+    analysis_sensitivity(args)
     # test_train(args)
     # test_mask(args)

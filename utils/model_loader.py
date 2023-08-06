@@ -20,11 +20,11 @@ def get_model(args, num_classes, load_ckpt=True, info=None, LU=False):
         elif args.model == 'resnet50':
             model = resnet50(num_classes=num_classes, pretrained=True, p=args.p, p_w=args.p_w, p_a=args.p_a, info=info, LU = LU, clip_threshold = args.threshold)
         elif args.model == 'mobilenet':
-            model = mobilenet_v2(num_classes=num_classes, pretrained=False, p=args.p, p_w=args.p_w, p_a=args.p_a, info=info, LU = LU, clip_threshold = args.threshold)
-            checkpoint = torch.load("/data/Public/PretrainedModels/mobilenet_v2-b0353104.pth")
+            model = mobilenet_v2(num_classes=num_classes, pretrained=True, p=args.p, p_w=args.p_w, p_a=args.p_a, info=info, LU = LU, clip_threshold = args.threshold)
+            # checkpoint = torch.load("/data/Public/PretrainedModels/mobilenet_v2-b0353104.pth")
 
-        elif args.model == 'vit':
-            # model = create_model("vit_base_patch16_384",pretrained=False,num_classes=num_classes)
+        # elif args.model == 'vit':
+        #     model = create_model("vit_base_patch16_384",pretrained=False,num_classes=num_classes)
 
     else:
         if args.model == 'resnet18':
