@@ -9,4 +9,5 @@ cache/
 gradcam/
 sensitivity_result/
 plot/
+puzzle_data/
 *.pyc

@@ -1405,7 +1405,7 @@ def analysis_react_sensitivity(args):
     fc_w = extact_mean_std(args, model)
     mask, class_mean = get_class_mean4(args, fc_w)
     class_mean = class_mean.cuda()
-    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.25, 1e5]:
+    for threshold in [0.1, 0.5, 0.8, 1.0, 1.5, 2.5, 1e5]:
         args.threshold = threshold
         
         in_scores=None
@@ -1684,20 +1684,20 @@ if __name__ == "__main__":
     if args.in_dataset == "CIFAR-10":
         if args.model == 'densenet':
             args.threshold = 1.6
-            args.threshold = 1.5
+            # args.threshold = 1.5
             # args.threshold = 1.2
         elif args.model == 'resnet18':
-            args.threshold = 0.8
+            args.threshold = 1.0
         args.p_a = 90
         args.p_w = 90
 
     elif args.in_dataset == "CIFAR-100":
         if args.model == 'densenet':
             args.threshold = 1.6
-            args.threshold = 2.25
+            # args.threshold = 2.25
             # args.threshold = 1.9
         elif args.model == 'resnet18':
-            args.threshold = 0.8
+            args.threshold = 1.0
         args.p_a = 10
         args.p_w = 90
             

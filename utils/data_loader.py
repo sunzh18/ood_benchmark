@@ -158,7 +158,7 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
         elif val_dataset == 'Textures':     #imagenet, cifar
             val_transform = config.transform_test_largescale if args.in_dataset in {'imagenet'} else config.transform_test
             valset = torchvision.datasets.ImageFolder(root="/data/Public/Datasets/dtd/images", transform=val_transform)
-            val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=True, num_workers=2)
+            val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
         
         
         elif val_dataset == 'Places':   # imagenet, cifar
@@ -215,7 +215,7 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
 
 
 def generate_gaussian_noise_image(size, mean, std):
-    noise = np.random.normal(0.5, 0.1, size)
+    noise = np.random.normal(0.5, 1, size)
     # noise = (noise * std) + mean
     noise = np.clip(noise, 0, 1).astype(np.float32)
     # noise = np.clip(noise, 0, 255).astype(np.uint8)
@@ -255,7 +255,13 @@ num_images = 10000  # 生成 10000 张高斯噪声图像
 
 # 创建高斯噪声数据集
 
-
+transform_puzzle_largescale = transforms.Compose([
+    transforms.Resize((224, 224)),
+    # transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+])
 
 def get_dataloader_noise(args, config_type='default'):
     config = EasyDict({
@@ -272,22 +278,24 @@ def get_dataloader_noise(args, config_type='default'):
     if args.in_dataset == "CIFAR-10":
         data_path = '/data/Public/Datasets/cifar10'
         # Data loading code
-        # valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
+        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
 
-        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+        val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
 
-        valset = Puzzle_CIFAR10(root=data_path, train=False, download=False, transform=config.transform_test)
+        # valset = Puzzle_CIFAR10(root=data_path, train=False, download=False, transform=config.transform_test)
+        valset = torchvision.datasets.CIFAR100(root='/data/Public/Datasets/cifar100', train=False, download=False, transform=config.transform_train)
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 10
 
     elif args.in_dataset == "CIFAR-100":
         data_path = '/data/Public/Datasets/cifar100'
         # Data loading code
-        # valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
+        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
 
-        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+        val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
 
-        valset = Puzzle_CIFAR100(root=data_path, train=False, download=False, transform=config.transform_test)
+        # valset = Puzzle_CIFAR100(root=data_path, train=False, download=False, transform=config.transform_test)
+        valset = torchvision.datasets.CIFAR10(root='/data/Public/Datasets/cifar10', train=False, download=False, transform=config.transform_train)
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 100
 
@@ -300,12 +308,34 @@ def get_dataloader_noise(args, config_type='default'):
 
        
     elif args.in_dataset == "imagenet":
-        root = '/data/Public/Datasets/ilsvrc2012'
+        root = '/data/Public/Datasets/ilsvrc2012/'
+
+        path = 'puzzle_data/ImageNet'
+
+        # for file_dir in os.listdir(root):
+        #     root_path = os.path.join(root, file_dir)
+        #     save_path = os.path.join(path, file_dir)
+        #     if not os.path.exists(save_path):
+        #         os.mkdir(save_path)
+        #     for file_name in os.listdir(root_path):
+        #         save_file_name = os.path.join(save_path, file_name)
+        #         file_name = os.path.join(root_path, file_name)
+                
+        #         img = Image.open(file_name) 
+        #         tiles = split_image(img)
+        #         shuffled_tiles = shuffle_tiles(tiles)
+        #         new_img = recompose_image(shuffled_tiles)
+
+        #         new_img.save(save_file_name)
+
+
         # Data loading code
-        # valset = GaussianNoiseDataset((3, 256, 256), mean, std, num_images)
+        # valset = GaussianNoiseDataset((3, 224, 224), mean, std, num_images)
 
         # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
-        valset = Puzzle_imagenet(os.path.join(root, 'val'), config.transform_test_largescale)
+        valset = torchvision.datasets.ImageFolder(path, config.transform_test_largescale)
+        l = len(valset)
+        valset, _ = torch.utils.data.random_split(valset, [10000, l-10000])
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 1000
     

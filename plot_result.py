@@ -344,14 +344,14 @@ def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # p = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
     # 以上内容是模拟数据 请忽略
     # 画图部分开始
-    # plt.figure(figsize=(10, 6))
-    plt.rcParams['font.size'] = 14
+    plt.figure(figsize=(8, 6))
+    plt.rcParams['font.size'] = 16
     plt.plot(p, auc, 'o-', color='red', label='ours')
     # plt.plot(p, sota, '--', color='blue', label='LINe')
     plt.axhline(y=sota[0], color='blue', linestyle='--', label='LINe')
     plt.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
-    plt.xlabel('Pruning percentile p', fontsize=22)
-    plt.ylabel('AUROC', fontsize=22)
+    plt.xlabel('Pruning percentile p', fontsize=24)
+    plt.ylabel('AUROC', fontsize=24)
 
     # fig, ax1 = plt.subplots()
     # ax2 = ax1.twinx()
@@ -373,10 +373,12 @@ def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # extra_tick = sota
     # plt.gca().yaxis.set_ticks([extra_tick])
     plt.xticks(p, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
-
-    ylim=(88, 93)
-    ylim=(96, 97.5)
+    # yticks = np.arange(87, 93, 1)
+    yticks = np.arange(94.5, 95.6, 0.2)
+    # ylim=(86, 93)
+    # ylim=(96, 97.5)
     # plt.ylim(ylim)
+    plt.yticks(yticks)
     # plt.title('Training and Validation Accuracy over Epochs')
     plt.legend(loc='lower right')
     # plt.grid(True)
@@ -393,7 +395,7 @@ def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # 以上内容是模拟数据 请忽略
     # 画图部分开始
     
-    plt.rcParams['font.size'] = 12
+    plt.rcParams['font.size'] = 14
     # plt.style.use('ggplot')
     # plt.plot(p, auc, 'o-', color='red', label='ours')
     # # plt.plot(p, sota, '--', color='blue', label='LINe')
@@ -402,7 +404,7 @@ def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # plt.xlabel('Pruning percentile p', fontsize=22)
     # plt.ylabel('AUROC', fontsize=22)
     # p_smooth = np.linspace(p.min(), p.max(), 8)  
-    p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0, 2.5])  
+    p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0])  
 
     # 使用样条插值方法进行平滑
     origin_auc = auc
@@ -414,6 +416,9 @@ def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # y_smooth = f(x_smooth)
     spl2 = make_interp_spline(p, fpr95)
     fpr95 = spl2(p_smooth)
+
+    
+
     p = p_smooth
     print(auc,p)
 
@@ -423,28 +428,41 @@ def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
 
     
     ax1.plot(p, auc, 'o-', color='red', label='AUROC:Ours')
+    ax1.plot(p, sota[0], '--', color='red', label='AUROC:LINe')
     # plt.plot(p, sota, '--', color='blue', label='LINe')
-    ax1.axhline(y=sota[0], color='red', linestyle='--', label='AUROC:LINe')
-    ax1.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
-    ax1.set_xlabel('Rectification threshold', fontsize=18)
-    ax1.set_ylabel('AUROC', fontsize=18)
+    # ax1.axhline(y=sota[0], color='red', linestyle='--', label='AUROC:LINe')
+    # ax1.text(0, sota[0], f'{sota[0]:.2f}', color='green', va='top', ha='left')
+    ax1.set_xlabel('Rectification threshold', fontsize=20)
+    ax1.set_ylabel('AUROC', fontsize=20)
     # plt.plot(fpr95, color='red', label='FPR95')
     # plt.ylabel('FPR95')
     # ax1.scatter(origin_p, origin_auc, color='red')
     ax2.plot(p, fpr95, 's-', color='blue', label='FPR95:Ours')
-    ax2.set_ylabel('FPR95', fontsize=18)
-    ax2.axhline(y=sota[1], color='blue', linestyle='--', label='FPR95:LINe')
-    ax2.text(max(p), sota[1], f'{sota[1]:.2f}', color='green', va='top', ha='center')
+    ax2.plot(p, sota[1], '--', color='blue', label='FPR95:LINe')
+    ax2.set_ylabel('FPR95', fontsize=20)
+    # ax2.axhline(y=sota[1], color='blue', linestyle='--', label='FPR95:LINe')
+    # ax2.text(max(p), sota[1], f'{sota[1]:.2f}', color='green', va='top', ha='center')
 
 
-    yticks1 = np.arange(93, 96, 0.5)
-    yticks2 = np.arange(19, 28, 1.5)
+    # yticks1 = np.arange(93, 96, 0.5)
+    # yticks2 = np.arange(19, 28, 1.5)
 
-    ax1.set_ylim(93, 96)
-    ax2.set_ylim(19, 28)
+    # ax1.set_ylim(93, 96)
+    # ax2.set_ylim(19, 28)
+
+    # ax1.set_yticks(yticks1)
+    # ax2.set_yticks(yticks2)
+
+
+    yticks1 = np.arange(88, 96, 1)
+    yticks2 = np.arange(19, 43, 3)
+
+    ax1.set_ylim(88, 96)
+    ax2.set_ylim(19, 43)
 
     ax1.set_yticks(yticks1)
     ax2.set_yticks(yticks2)
+    ax1.set_xlim(0, 2.1)
     # plt.yticks([20, 30, 40], ['20', '30', '40'])
     # plt.xlim(0, 1.0)
     # extra_tick = sota
@@ -457,9 +475,12 @@ def draw_react_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # plt.title('Training and Validation Accuracy over Epochs')
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    # ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='lower right')
     # plt.grid(True)
-    plt.grid(axis='y')
+    # plt.grid(axis='y')
+    ax1.grid(axis='y')
+    # ax2.grid(axis='y')
     plt.tight_layout()
     # filename = os.path.join(save_dir, f'{args.in_dataset}_{args.score}_zoom.pdf')
     filename = os.path.join(save_dir, f'react_{args.in_dataset}_{args.score}.pdf')
@@ -541,7 +562,7 @@ def sensitivity(args):
         os.makedirs(save_dir)
     filepath = os.path.join('sensitivity_result', args.name, args.model)
     # filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
-    filename = os.path.join(filepath, f"react_{args.in_dataset}_{args.score}.csv")
+    filename = os.path.join(filepath, f"react_{args.in_dataset}_{args.score}_2.csv")
     data_array = []
     with open(filename) as csv_file:
         csv_reader = csv.reader(csv_file)
@@ -574,11 +595,24 @@ def sensitivity(args):
     elif args.in_dataset == "imagenet":
         sota = [95.02] * len(Auc)
         sota = [95.02, 20.70]
+        sota_auc = np.array([88.44, 94.79, 94.83, 95.02, 94.81, 93.99, 92.97])
+        sota_fpr = np.array([41.18, 23.43, 23.45, 20.70, 21.69, 26.96, 31.88])
+        
 
+    sota_p = [0.1, 0.4, 0.5, 0.8, 1.0, 1.5, 2.0]
+    p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0])  
+    spl = make_interp_spline(sota_p, sota_auc)
+    sota_auc = spl(p_smooth)
+
+    spl = make_interp_spline(sota_p, sota_fpr)
+    sota_fpr = spl(p_smooth)
+    sota = [sota_auc,  sota_fpr]
+    sota = np.array(sota)
     # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
     # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     p = np.array([0.1, 0.5, 0.8, 1.0, 1.5, 2.5])
     draw_react_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
+    # draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
     # args.logdir='sensitivity_result'
     # logger = log.setup_logger(args)
     # args.p = 80

@@ -62,18 +62,20 @@ class Puzzle_CIFAR10(CIFAR10):
         # to return a PIL Image
         img = Image.fromarray(img)
         # print(img.size)
-        noise = np.random.normal(0, 0.3, (3, img.size[0], img.size[1]))
+        # noise = np.random.normal(0, 0.3, (3, img.size[0], img.size[1]))
         
-        # tiles = split_image(img)
-        # shuffled_tiles = shuffle_tiles(tiles)
-        # img = recompose_image(shuffled_tiles)
+        tiles = split_image(img)
+        shuffled_tiles = shuffle_tiles(tiles)
+        img = recompose_image(shuffled_tiles)
         if self.transform is not None:
             img = self.transform(img)
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        img = img + torch.tensor(noise)
-        img = img.float()
+        
+        # noise = np.random.normal(0, 0.2, img.shape)
+        # img = img + torch.tensor(noise)
+        # img = img.float()
         return img, target
 
 
@@ -93,18 +95,20 @@ class Puzzle_CIFAR100(CIFAR100):
         # to return a PIL Image
         img = Image.fromarray(img)
         # print(img.size)
-        noise = np.random.normal(0, 0.3, (3, img.size[0], img.size[1]))
+        # noise = np.random.normal(0, 0.3, (3, img.size[0], img.size[1]))
         
-        # tiles = split_image(img)
-        # shuffled_tiles = shuffle_tiles(tiles)
-        # img = recompose_image(shuffled_tiles)
+        tiles = split_image(img)
+        shuffled_tiles = shuffle_tiles(tiles)
+        img = recompose_image(shuffled_tiles)
         if self.transform is not None:
             img = self.transform(img)
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        img = img + torch.tensor(noise)
-        img = img.float()
+
+        # noise = np.random.normal(0, 0.2, img.shape)
+        # img = img + torch.tensor(noise)
+        # img = img.float()
         return img, target
 
 
@@ -121,13 +125,18 @@ class Puzzle_imagenet(ImageFolder):
         path, target = self.samples[index]
         sample = self.loader(path)
         
+        tiles = split_image(sample)
+        shuffled_tiles = shuffle_tiles(tiles)
+        sample = recompose_image(shuffled_tiles)
+
         if self.transform is not None:
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
+
         # print(sample.shape)
-        noise = np.random.normal(0, 0.5, sample.shape)
-        sample = sample + torch.tensor(noise)
-        sample = sample.float()
+        # noise = np.random.normal(0, 0.5, sample.shape)
+        # sample = sample + torch.tensor(noise)
+        # sample = sample.float()
         return sample, target   

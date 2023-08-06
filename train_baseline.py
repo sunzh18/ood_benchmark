@@ -68,9 +68,9 @@ def train_model(args, model, train_dataloader, test_dataloader):
 
     criterion = nn.CrossEntropyLoss()                     #交叉熵损失                 
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=5e-4)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,150],gamma = 0.1)
-    if args.in_dataset == 'CIFAR-10':
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,150],gamma = 0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[50,70,90],gamma = 0.1)
+    # if args.in_dataset == 'CIFAR-10':
+    #     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100,150],gamma = 0.1)
 
 
     Train_accuracy = list()      #训练集正确率列表

@@ -504,10 +504,12 @@ def analysis_sensitivity(args):
     if not os.path.exists(result_path):
         fp = open(result_path,'a+')
         result = []
-        result.append('model')
-        result.append('out-dataset')
         result.append('AUROC')
+        for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]:
+            result.append(f'p: {p}')
         result.append('FPR95')
+        for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]:
+            result.append(f'p: {p}')
         context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
         context.writerow(result)
         fp.close()
@@ -540,15 +542,16 @@ def analysis_sensitivity(args):
     In_Score = []
 
     file_folder = os.path.join('sensitivity_result', args.name, args.model)
-    # In_Score = np.load(f"{file_folder}/{args.in_dataset}_{args.score}.npy")
+    In_Score = np.load(f"{file_folder}/{args.in_dataset}_{args.score}_v2.npy")
 
     num = 0
+    AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
     for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]:
         args.p = p
         mask, class_mean = get_class_mean4(args, fc_w)
         class_mean = class_mean.cuda()
-        in_scores=None
-        # in_scores=In_Score[num]
+        # in_scores=None
+        in_scores = In_Score[num]
         num += 1
 
 
@@ -561,20 +564,25 @@ def analysis_sensitivity(args):
         auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset='puzzle', mask=mask, class_mean=class_mean, in_scores=in_scores)
         end_time = time.time()
         logger.info("Total running time: {}".format(end_time - start_time))
-
-        In_Score.append(in_scores)
+        AUroc.append(auroc)
+        AUPR_in.append(aupr_in)
+        AUPR_out.append(aupr_out)
+        Fpr95.append(fpr95)
+        # In_Score.append(in_scores)
         
-        result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_puzzle_{args.score}.csv")
-        fp = open(result_path,'a+')
-        result = []
+    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_puzzle_{args.score}.csv")
+    fp = open(result_path,'a+')
+    result = []
 
-        result.append(f'p: {args.p}/threshold{args.threshold}')
-        result.append('Average')
-        result.append("{:.2f}".format(auroc))
-        result.append("{:.2f}".format(fpr95))
-        context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
-        context.writerow(result)
-        fp.close()
+    result.append('AUROC')
+    for auc in AUroc:
+        result.append("{:.4f}".format(auc))
+    result.append('FPR95')
+    for fpr95 in Fpr95:
+        result.append("{:.4f}".format(fpr95))
+    context = csv.writer(fp,dialect='excel')       # 定义一个变量进行写入，将刚才的文件变量传进来，dialect就是定义一下文件的类型，我们定义为excel类型
+    context.writerow(result)
+    fp.close()
 
     
     In_Score = np.array(In_Score)
@@ -724,6 +732,7 @@ if __name__ == "__main__":
             args.threshold = 0.8
         args.p_a = 90
         args.p_w = 90
+        args.threshold = 1e5
 
     elif args.in_dataset == "CIFAR-100":
         if args.model == 'densenet':
@@ -734,6 +743,7 @@ if __name__ == "__main__":
             args.threshold = 0.8
         args.p_a = 10
         args.p_w = 90
+        args.threshold = 1e5
             
     elif args.in_dataset == "imagenet":
         args.threshold = 0.8
