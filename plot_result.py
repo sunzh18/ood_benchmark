@@ -300,7 +300,14 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     # sort v1 and v2 according to the sorted indices
     in_sorted = in_class_mean[sorted_indices]
     out_sorted = out_class_mean[sorted_indices]
+    fc = fc[sorted_indices]
 
+    correlation_matrix_in = np.corrcoef(in_sorted, fc)
+    correlation_matrix_out = np.corrcoef(out_sorted, fc)
+    
+    correlation_in = correlation_matrix_in[0, 1]
+    correlation_out = correlation_matrix_out[0, 1]
+    # print(f'in:{correlation_in}, out:{correlation_out}')
     # plot
     plt.rcParams['font.size'] = 14
     plt.figure(figsize=(10, 6))
@@ -315,8 +322,8 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     plt.ylabel('Activation', fontsize=22)
 
     ax = plt.gca().twinx()
-    plt.plot(fc[sorted_indices], color='darkblue', label='w', alpha=0.8)
-    plt.ylabel('Classifer weight', fontsize=22)
+    plt.plot(fc, color='darkblue', label='w', alpha=0.8)
+    plt.ylabel('Classifer head weight', fontsize=22)
 
 
     # 同时显示左右两个图例
@@ -335,7 +342,7 @@ def draw_feature(args, in_class_mean, out_class_mean, fc, save_dir, out_dataset,
     save_dir = os.path.join(save_dir, args.in_dataset, out_dataset)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    filename = os.path.join(save_dir, f'{classid}.pdf')
+    filename = os.path.join(save_dir, f'{classid}_{correlation_in}_{correlation_out}.pdf')
     plt.savefig(filename)
 
 def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
@@ -374,11 +381,11 @@ def draw_sensitivity(args, auc, fpr95, sota, p, save_dir):
     # plt.gca().yaxis.set_ticks([extra_tick])
     plt.xticks(p, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
     # yticks = np.arange(87, 93, 1)
-    yticks = np.arange(94.5, 95.6, 0.2)
+    # yticks = np.arange(94.5, 95.6, 0.2)
     # ylim=(86, 93)
-    # ylim=(96, 97.5)
-    # plt.ylim(ylim)
-    plt.yticks(yticks)
+    ylim=(90, 97)
+    plt.ylim(ylim)
+    # plt.yticks(yticks)
     # plt.title('Training and Validation Accuracy over Epochs')
     plt.legend(loc='lower right')
     # plt.grid(True)
@@ -561,8 +568,8 @@ def sensitivity(args):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     filepath = os.path.join('sensitivity_result', args.name, args.model)
-    # filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
-    filename = os.path.join(filepath, f"react_{args.in_dataset}_{args.score}_2.csv")
+    filename = os.path.join(filepath, f"{args.in_dataset}_{args.score}.csv")
+    # filename = os.path.join(filepath, f"react_{args.in_dataset}_{args.score}_2.csv")
     data_array = []
     with open(filename) as csv_file:
         csv_reader = csv.reader(csv_file)
@@ -599,20 +606,20 @@ def sensitivity(args):
         sota_fpr = np.array([41.18, 23.43, 23.45, 20.70, 21.69, 26.96, 31.88])
         
 
-    sota_p = [0.1, 0.4, 0.5, 0.8, 1.0, 1.5, 2.0]
-    p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0])  
-    spl = make_interp_spline(sota_p, sota_auc)
-    sota_auc = spl(p_smooth)
+    # sota_p = [0.1, 0.4, 0.5, 0.8, 1.0, 1.5, 2.0]
+    # p_smooth = np.array([0.1, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0])  
+    # spl = make_interp_spline(sota_p, sota_auc)
+    # sota_auc = spl(p_smooth)
 
-    spl = make_interp_spline(sota_p, sota_fpr)
-    sota_fpr = spl(p_smooth)
-    sota = [sota_auc,  sota_fpr]
-    sota = np.array(sota)
+    # spl = make_interp_spline(sota_p, sota_fpr)
+    # sota_fpr = spl(p_smooth)
+    # sota = [sota_auc,  sota_fpr]
+    # sota = np.array(sota)
     # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
-    # p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    p = np.array([0.1, 0.5, 0.8, 1.0, 1.5, 2.5])
-    draw_react_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
-    # draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
+    p = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    # p = np.array([0.1, 0.5, 0.8, 1.0, 1.5, 2.5])
+    # draw_react_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
+    draw_sensitivity(args, Auc, Fpr95, sota, p, save_dir)
     # args.logdir='sensitivity_result'
     # logger = log.setup_logger(args)
     # args.p = 80
@@ -796,8 +803,8 @@ if __name__ == "__main__":
     # analysis_confidence(args)
     # analysis_feature(args)
     # analysis_cos(args)
-    # main(args)
-    sensitivity(args)
+    main(args)
+    # sensitivity(args)
     # compute_threshold(args)
     # test_train(args)
     # test_mask(args)

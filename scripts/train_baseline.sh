@@ -18,7 +18,7 @@ CUDA_VISIBLE_DEVICES=${GPU} python train_baseline.py \
 --batch 128 \
 --in_dataset ${in_dataset} \
 --lr 0.1 \
---epochs 200 \
+--epochs 100 \
 --arch ${arch}
 # --wandb ${wandb} \
 # --model_path ${model_path}
