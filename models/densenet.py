@@ -271,7 +271,7 @@ class DenseNet3(nn.Module):
         out = out.clip(max=threshold)
         out = out.view(-1, self.in_planes)
         feature = out
-        out, feat = self.fc(out)
+        out = self.fc(out)
         return out, feature
 
     def _forward(self, x):

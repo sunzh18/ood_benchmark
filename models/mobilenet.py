@@ -222,8 +222,8 @@ class MobileNetV2(nn.Module):
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
         x = x.clip(max=threshold)
-
-        out, feat = self.classifier(x)
+        feat = x
+        out = self.classifier(x)
         return out, feat
 
     def forward_threshold(self, x, threshold=1e10):

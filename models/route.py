@@ -92,4 +92,4 @@ class RouteLUNCH(nn.Linear):
             out = vote.sum(2) + self.bias
         else:
             out = vote.sum(2)    
-        return out, cp
+        return out

@@ -354,8 +354,9 @@ class ResNetCifar(AbstractResNet):
         feat = self.avgpool(feat)
         feat = feat.clip(max=threshold)
         feat = feat.view(feat.size(0), -1)
-        out, feat = self.fc(feat)
-        return out, feat
+        feature = feat
+        out = self.fc(feat)
+        return out, feature
     
     def forward_threshold(self, x, threshold=1e10):
         x = self.features(x)
