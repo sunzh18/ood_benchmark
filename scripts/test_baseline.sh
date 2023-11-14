@@ -13,7 +13,7 @@ model_path="checkpoints/network"
 CUDA_VISIBLE_DEVICES=${GPU} python test_baselines.py \
 --model ${model} \
 --name baseline \
---batch 64 \
+--batch 32 \
 --in_dataset ${in_dataset} \
 --logdir result \
 --score ${SCORE} \

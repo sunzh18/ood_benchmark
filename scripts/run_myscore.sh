@@ -17,7 +17,7 @@ name='baseline'
 CUDA_VISIBLE_DEVICES=${GPU} python my_classmean_score.py \
 --model ${model} \
 --name ${name} \
---batch 64 \
+--batch 32 \
 --in_dataset ${in_dataset} \
 --logdir ${logdir} \
 --model_path ${model_path} \

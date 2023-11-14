@@ -1099,6 +1099,36 @@ def iterate_data_my23(data_loader, model, temper, mask, p, threshold, class_mean
 
     return np.array(confs)
 
+
+def iterate_data_my23_ablation(data_loader, model, temper, mask, p, threshold, class_mean):
+    Right = []
+    Sum = []
+    confs = []
+    for b, (x, y) in enumerate(data_loader):
+        with torch.no_grad():
+            x = x.cuda()        
+            output = model(x)      
+            # output = model.forward_threshold(x, threshold)
+    #         print(output.shape, output)
+
+            pred_y = torch.max(output, 1)[1].cpu().numpy()
+
+            # feature = model.forward_threshold_features(x, threshold)
+            feature = model.forward_features(x)
+            cp = torch.zeros(feature.shape).cuda()
+            class_mask = torch.zeros(feature.shape).cuda()
+            cp = feature * mask[pred_y,:].cuda()
+            
+            logits = model.forward_head(cp)
+
+            # v = torch.sum(torch.mul(class_mask,cp),dim=1)
+            conf = temper * (torch.logsumexp((logits) / temper, dim=1))
+            # conf = conf * torch.exp(cos_sim)
+            confs.extend(conf.data.cpu().numpy())
+
+    return np.array(confs)
+
+
 def iterate_data_cosine(data_loader, model, temper, mask, p, threshold, class_mean):
     Right = []
     Sum = []

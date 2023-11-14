@@ -1300,7 +1300,7 @@ def analysis_sensitivity(args):
 
     fc_w = extact_mean_std(args, model)
     # [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]
-    for p in [99]:
+    for p in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99]:
         args.p = p
         mask, class_mean = get_class_mean4(args, fc_w)
         class_mean = class_mean.cuda()
@@ -1688,6 +1688,7 @@ if __name__ == "__main__":
             # args.threshold = 1.2
         elif args.model == 'resnet18':
             args.threshold = 1.0
+        args.threshold = 1.4
         args.p_a = 90
         args.p_w = 90
 

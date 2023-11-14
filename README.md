@@ -1,6 +1,5 @@
 整理了一些ood方法的代码，以及自己的尝试
 
-
 ### 1. Dataset Preparation for Large-scale Experiment
 
 #### In-distribution dataset
@@ -73,6 +72,8 @@ tar -xvzf LSUN.tar.gz
 
 * [PyTorch](https://pytorch.org/)
 * [numpy](http://www.numpy.org/)
+* mmcv
+* 
 
 ## Precompute
 

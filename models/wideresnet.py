@@ -172,7 +172,8 @@ class WideResNet(nn.Module):
         out = F.avg_pool2d(out, 8)
         out = out.clip(max=threshold)
         out = out.view(-1, self.nChannels)
-        out, feat = self.fc(out)
+        feat = out
+        out = self.fc(out)
         return out, feat
 
     def feature_list(self, x):

@@ -157,7 +157,7 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
             
         elif val_dataset == 'Textures':     #imagenet, cifar
             val_transform = config.transform_test_largescale if args.in_dataset in {'imagenet'} else config.transform_test
-            valset = torchvision.datasets.ImageFolder(root="/data/Public/Datasets/dtd/images", transform=val_transform)
+            valset = torchvision.datasets.ImageFolder(root="/data/Public/Datasets/dtd/dtd/images", transform=val_transform)
             val_ood_loader = torch.utils.data.DataLoader(valset, batch_size=batch_size, shuffle=False, num_workers=2)
         
         
@@ -215,12 +215,12 @@ def get_dataloader_out(args, dataset=(''), config_type='default', split=('val'))
 
 
 def generate_gaussian_noise_image(size, mean, std):
-    noise = np.random.normal(0.5, 1, size)
+    noise = np.random.normal(0, 1, size)
     # noise = (noise * std) + mean
     noise = np.clip(noise, 0, 1).astype(np.float32)
     # noise = np.clip(noise, 0, 255).astype(np.uint8)
-    # noise_image = Image.fromarray(noise, mode='RGB')
-    noise_image = torch.tensor(noise).float()
+    noise_image = Image.fromarray(noise, mode='RGB')
+    # noise_image = torch.tensor(noise).float()
     return noise_image
 
 # 转换图像为 PyTorch 的 tensor 格式
@@ -278,32 +278,36 @@ def get_dataloader_noise(args, config_type='default'):
     if args.in_dataset == "CIFAR-10":
         data_path = '/data/Public/Datasets/cifar10'
         # Data loading code
-        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
+        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images, transform_test)
 
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
 
         # valset = Puzzle_CIFAR10(root=data_path, train=False, download=False, transform=config.transform_test)
-        valset = torchvision.datasets.CIFAR100(root='/data/Public/Datasets/cifar100', train=False, download=False, transform=config.transform_train)
-        val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+        # valset = torchvision.datasets.CIFAR100(root='/data/Public/Datasets/cifar100', train=False, download=False, transform=config.transform_train)
+        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 10
 
     elif args.in_dataset == "CIFAR-100":
         data_path = '/data/Public/Datasets/cifar100'
         # Data loading code
-        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images)
+        valset = GaussianNoiseDataset((3, width, height), mean, std, num_images, transform_test)
 
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
 
         # valset = Puzzle_CIFAR100(root=data_path, train=False, download=False, transform=config.transform_test)
-        valset = torchvision.datasets.CIFAR10(root='/data/Public/Datasets/cifar10', train=False, download=False, transform=config.transform_train)
-        val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+        # valset = torchvision.datasets.CIFAR10(root='/data/Public/Datasets/cifar10', train=False, download=False, transform=config.transform_train)
+        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 100
 
     elif args.in_dataset == "imagenet100":
         root = '/data/Public/Datasets/ImageNet100'
         # Data loading code
-        valset = torchvision.datasets.ImageFolder(os.path.join(root, 'val'), config.transform_test_largescale)
+        valset = GaussianNoiseDataset((3, 224, 224), mean, std, num_images)
+
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+
+        # valset = torchvision.datasets.ImageFolder(os.path.join(root, 'val'), config.transform_test_largescale)
+        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
         num_classes = 1000
 
        
@@ -330,14 +334,14 @@ def get_dataloader_noise(args, config_type='default'):
 
 
         # Data loading code
-        # valset = GaussianNoiseDataset((3, 224, 224), mean, std, num_images)
+        valset = GaussianNoiseDataset((3, 224, 224), mean, std, num_images, transform_test_largescale)
 
-        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
-        valset = torchvision.datasets.ImageFolder(path, config.transform_test_largescale)
-        l = len(valset)
-        valset, _ = torch.utils.data.random_split(valset, [10000, l-10000])
         val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
-        num_classes = 1000
+        # valset = torchvision.datasets.ImageFolder(path, config.transform_test_largescale)
+        # l = len(valset)
+        # valset, _ = torch.utils.data.random_split(valset, [10000, l-10000])
+        # val_loader = torch.utils.data.DataLoader(valset, batch_size=config.batch_size, shuffle=True, **kwargs)
+        # num_classes = 1000
     
     return EasyDict({
         "val_ood_loader": val_loader,

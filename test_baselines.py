@@ -79,8 +79,8 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_react(out_loader, model, args.temperature_energy, args.threshold)
     elif args.score == 'react':
-        # args.threshold = 1.0      
-        args.threshold = 0.7    #resnet18
+        args.threshold = 1.0      
+        # args.threshold = 0.7    #resnet18
         if args.in_dataset == "CIFAR-10":
             # args.threshold = 0.8
             # args.p = 10

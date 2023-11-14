@@ -396,6 +396,16 @@ def run_eval(model, in_loader, out_loader, logger, args, num_classes, out_datase
         logger.info("Processing out-of-distribution data...")
         out_scores = iterate_data_my23(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
 
+    elif args.score == 'FM':
+        p = 0
+        if args.p:
+            p = args.p
+        if in_scores is None: 
+            logger.info("Processing in-distribution data...")
+            in_scores = iterate_data_my23_ablation(in_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+        logger.info("Processing out-of-distribution data...")
+        out_scores = iterate_data_my23_ablation(out_loader, model, args.temperature_energy, mask, p, args.threshold, class_mean)
+
     elif args.score == 'cosine':
         p = 0
         if args.p:
@@ -500,7 +510,7 @@ def analysis_score(args, in_examples, out_examples, out_dataset):
 def analysis_sensitivity(args):
     args.logdir='sensitivity_result'
     logger = log.setup_logger(args)
-    result_path = os.path.join('sensitivity_result', args.name, args.model, f"{args.in_dataset}_puzzle_{args.score}.csv")
+    result_path = os.path.join('sensitivity_result', args.name, args.model, f"{args.in_dataset}_gaussian_{args.score}.csv")
     if not os.path.exists(result_path):
         fp = open(result_path,'a+')
         result = []
@@ -542,7 +552,7 @@ def analysis_sensitivity(args):
     In_Score = []
 
     file_folder = os.path.join('sensitivity_result', args.name, args.model)
-    In_Score = np.load(f"{file_folder}/{args.in_dataset}_{args.score}_v2.npy")
+    In_Score = np.load(f"{file_folder}/{args.in_dataset}_{args.score}.npy")
 
     num = 0
     AUroc, AUPR_in, AUPR_out, Fpr95 = [], [], [], []
@@ -561,7 +571,7 @@ def analysis_sensitivity(args):
 
 
         start_time = time.time()
-        auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset='puzzle', mask=mask, class_mean=class_mean, in_scores=in_scores)
+        auroc, aupr_in, aupr_out, fpr95, in_scores = run_eval(model, in_loader, out_loader, logger, args, num_classes=num_classes, out_dataset='gaussian', mask=mask, class_mean=class_mean, in_scores=in_scores)
         end_time = time.time()
         logger.info("Total running time: {}".format(end_time - start_time))
         AUroc.append(auroc)
@@ -570,7 +580,7 @@ def analysis_sensitivity(args):
         Fpr95.append(fpr95)
         # In_Score.append(in_scores)
         
-    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_puzzle_{args.score}.csv")
+    result_path = os.path.join(args.logdir, args.name, args.model, f"{args.in_dataset}_gaussian_{args.score}.csv")
     fp = open(result_path,'a+')
     result = []
 
@@ -585,9 +595,9 @@ def analysis_sensitivity(args):
     fp.close()
 
     
-    In_Score = np.array(In_Score)
+    # In_Score = np.array(In_Score)
 
-    np.save(f"{file_folder}/{args.in_dataset}_{args.score}.npy", In_Score)
+    # np.save(f"{file_folder}/{args.in_dataset}_{args.score}.npy", In_Score)
 
 def analysis_react_sensitivity(args):
     args.logdir='sensitivity_result'
@@ -753,7 +763,7 @@ if __name__ == "__main__":
         args.p_a = 10
         args.p_w = 10
     
-    # args.threshold = 1e5
+    args.threshold = 1e5
     # analysis(args)
     # analysis_confidence(args)
     # analysis_feature(args)
